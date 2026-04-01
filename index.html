@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Media Gallery (Image & Video)</title>
+    <title>Media Gallery (Image & Video & Audio)</title>
     <style>
         :root {
             --bg-color: #f0f2f5;
@@ -12,7 +12,7 @@
         }
 
         body { font-family: sans-serif; background: var(--bg-color); padding: 20px; }
-		h1 { font-size:2.5rem; text-align:center; }
+        h1 { font-size:2.5rem; text-align:center; }
         .gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -31,7 +31,6 @@
             flex-direction: column;
         }
 
-        /* 画像と動画のサムネイル共通スタイル */
         .thumb-wrapper {
             width: 100%;
             height: 180px;
@@ -46,7 +45,6 @@
             object-fit: cover;
         }
 
-        /* 動画の場合に「再生マーク」を重ねる（任意） */
         .video-indicator::after {
             content: "▶";
             position: absolute;
@@ -63,7 +61,6 @@
             padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
         }
 
-        /* --- ライトボックス --- */
         .lightbox {
             display: none; position: fixed; z-index: 1000;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -71,15 +68,15 @@
             justify-content: center; align-items: center;
         }
         .lightbox.active { display: flex; }
-		.lightbox-content {
-		    width: 90vw;      /* 画面の横幅の90%を基準にする */
-		    height: 80vh;     /* 画面の高さの80%を基準にする */
-		    object-fit: contain; /* アスペクト比を維持しつつ、枠内に最大サイズで収める */
-		    outline: none;
-		}
-		video.lightbox-content {
-		    background-color: #000;
-		}
+        .lightbox-content {
+            width: 90vw;
+            height: 80vh;
+            object-fit: contain;
+            outline: none;
+        }
+        video.lightbox-content {
+            background-color: #000;
+        }
         .close-btn { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; cursor: pointer; }
 
         .toast {
@@ -90,13 +87,13 @@
     </style>
 </head>
 <body>
-	<h1>Media Gallery (Image & Video)</h1>
+    <h1>Media Gallery</h1>
     <div class="gallery" id="media-container"></div>
 
     <div class="lightbox" id="lightbox" onclick="closeLightbox()">
         <span class="close-btn">&times;</span>
         <div id="lightbox-body" class="lightbox-content" onclick="event.stopPropagation()">
-            </div>
+        </div>
         <div style="margin-top:20px;">
             <button class="copy-btn" id="modal-copy-btn">URLをコピー</button>
         </div>
@@ -105,7 +102,7 @@
     <div id="toast" class="toast">URLをコピーしました！</div>
 
     <script>
-        // 画像と動画のURLが混ざったリスト
+        // ここに画像のURLリストを配置してください
         const mediaUrls = [
 			"https://cdn.nostrcheck.me/ab38ebf946cfea45af1ed60a29b45d0e3255e2771606faac56ef2262a217675a.webp",
 			"https://cdn.nostrcheck.me/9d32af2674e6982767e6ab8b9782143868d3809b0e5cb7e277d1ae69dfa3d012.webp",
@@ -948,8 +945,24 @@
         const lightboxBody = document.getElementById('lightbox-body');
         const modalCopyBtn = document.getElementById('modal-copy-btn');
 
-        // ファイルが動画かどうか判定するヘルパー
         const isVideo = (url) => url.toLowerCase().endsWith('.mp4');
+        const isAudio = (url) => url.toLowerCase().endsWith('.mp3');
+
+        // 動画用の遅延読み込みObserver設定
+        const videoObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const video = entry.target;
+                    video.src = video.dataset.src;
+                    video.preload = "metadata";
+                    observer.unobserve(video);
+                }
+            });
+        }, {
+            rootMargin: "0px 0px 300px 0px"
+        });
+
+        const fragment = document.createDocumentFragment();
 
         mediaUrls.forEach(url => {
             const item = document.createElement('div');
@@ -960,18 +973,45 @@
             thumbWrapper.onclick = () => openLightbox(url);
 
             if (isVideo(url)) {
-                // 動画サムネイルの設定
+                // 動画の処理
                 const video = document.createElement('video');
-                // #t=0.1 を付けると最初の0.1秒地点を表示してくれる
-                video.src = url + "#t=0.1";
-                video.preload = "metadata";
+                video.dataset.src = url + "#t=0.1";
+                video.preload = "none";
                 video.muted = true;
+                
                 thumbWrapper.appendChild(video);
                 thumbWrapper.classList.add('video-indicator');
+                videoObserver.observe(video);
+
+            } else if (isAudio(url)) {
+                // 音声の処理
+                const audioIcon = document.createElement('div');
+                audioIcon.style.color = "white";
+                audioIcon.style.height = "100%";
+                audioIcon.style.width = "100%";
+                audioIcon.style.display = "flex";
+                audioIcon.style.flexDirection = "column"; 
+                audioIcon.style.alignItems = "center";
+                audioIcon.style.justifyContent = "center";
+                audioIcon.style.padding = "10px";
+                audioIcon.style.boxSizing = "border-box";
+
+                const fileName = url.substring(url.lastIndexOf('/') + 1).split(/[?#]/)[0];
+
+                audioIcon.innerHTML = `
+                    <div style="font-size: 32px; margin-bottom: 8px;">🎵</div>
+                    <div style="font-size: 12px; width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">
+                        ${fileName}
+                    </div>
+                `;
+                
+                thumbWrapper.appendChild(audioIcon);
+
             } else {
-                // 画像サムネイルの設定
+                // 画像の処理
                 const img = document.createElement('img');
                 img.src = url;
+                img.loading = "lazy";
                 thumbWrapper.appendChild(img);
             }
 
@@ -985,11 +1025,13 @@
             info.appendChild(btn);
             item.appendChild(thumbWrapper);
             item.appendChild(info);
-            container.appendChild(item);
+            fragment.appendChild(item);
         });
 
+        container.appendChild(fragment);
+
         function openLightbox(url) {
-            lightboxBody.innerHTML = ''; // 中身をリセット
+            lightboxBody.innerHTML = ''; 
 
             if (isVideo(url)) {
                 const video = document.createElement('video');
@@ -998,6 +1040,12 @@
                 video.autoplay = true;
                 video.classList.add('lightbox-content');
                 lightboxBody.appendChild(video);
+            } else if (isAudio(url)) {
+                const audio = document.createElement('audio');
+                audio.src = url;
+                audio.controls = true;
+                audio.autoplay = true;
+                lightboxBody.appendChild(audio);
             } else {
                 const img = document.createElement('img');
                 img.src = url;
@@ -1010,7 +1058,6 @@
         }
 
         function closeLightbox() {
-            // 動画が流れたままにならないよう中身を空にする
             lightboxBody.innerHTML = '';
             lightbox.classList.remove('active');
         }
