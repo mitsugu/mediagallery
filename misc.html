@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Gallery (Image & Video & Audio)</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --accent-color: #007bff;
+        }
+
+        body { font-family: sans-serif; background: var(--bg-color); padding: 20px; }
+        h1 { font-size:2.5rem; text-align:center; }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .gallery-item {
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .thumb-wrapper {
+            width: 100%;
+            height: 180px;
+            cursor: pointer;
+            background: #000;
+            position: relative;
+        }
+
+        .thumb-wrapper img, .thumb-wrapper video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-indicator::after {
+            content: "▶";
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.8);
+            font-size: 30px;
+            pointer-events: none;
+        }
+
+        .item-info { padding: 10px; display: flex; justify-content: center; }
+        .copy-btn {
+            background: var(--accent-color); color: white; border: none;
+            padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+        }
+
+        .lightbox {
+            display: none; position: fixed; z-index: 1000;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox-content {
+            width: 90vw;
+            height: 80vh;
+            object-fit: contain;
+            outline: none;
+        }
+        video.lightbox-content {
+            background-color: #000;
+        }
+        .close-btn { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; cursor: pointer; }
+
+			.toast {
+				position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+				background: #333; color: white; padding: 10px 20px; border-radius: 20px;
+				opacity: 0; transition: opacity 0.3s; pointer-events: none;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Media Gallery</h1>
+		<div class="gallery" id="media-container"></div>
+
+		<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+			<span class="close-btn">&times;</span>
+			<div id="lightbox-body" class="lightbox-content" onclick="event.stopPropagation()">
+			</div>
+			<div style="margin-top:20px;">
+				<button class="copy-btn" id="modal-copy-btn">URLをコピー</button>
+			</div>
+		</div>
+
+		<div id="toast" class="toast">URLをコピーしました！</div>
+
+		<script>
+			const mediaUrls = [
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026102301.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026102302.webp",
+				"https://raw.githubusercontent.com/mitsugu/video01/refs/heads/main/for%20likebar/202610/2026101501.mp4",
+				"https://raw.githubusercontent.com/mitsugu/video01/refs/heads/main/for%20likebar/202610/2026100805.mp4",
+				"https://raw.githubusercontent.com/mitsugu/video01/refs/heads/main/for%20likebar/202610/2026100804.mp4",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Misc/2026100901.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026100801.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026100802.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diary/2026/10/2026101118132101.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026101102.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026101201.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026101202.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026101301.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026100901.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026100701.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026100601.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/for%20sns/2026100601.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026100309534701.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026100422053901.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diving/2026100205092501.webp",
+				"https://share.yabu.me/f1043f91b2bb497938e6ba02b92ed0356cdeec197fa5af43035655e5c53939e4.mp4",
+				"https://share.yabu.me/2a5a04d2c9f9dd8b2d33b588b816365e6780aad7cd6ddb211514c3e0ab68c250.mp4",
+				"https://orzbruford.jp/202503/fig2025031701.svg",
+				"https://orzbruford.jp/202503/fig2025031801.svg",
+				"https://i.imgur.com/Ws6DxNE.gif",
+				"https://i.imgur.com/3AiGnC8.jpeg",
+				"https://orzbruford.jp/202609/fig2026092802.webp",
+				"https://orzbruford.jp/202609/fig2026092901.jpg",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Misc/2026081101.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Misc/2026092502.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Misc/2026092503.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Misc/2026092504.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Misc/2026092701.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Misc/2026092702.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Misc/2026092703.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2010112521305801.jpg",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2010112521305801.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2025020222462800.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2025020610084400.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/20250507190812261.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/20250605171333107.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/20250605173248033.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/20250618135122595.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/20250618135735108.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/20250621124348012.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2026092308093301.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2026092308122301.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2026092308171901.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2026092308222501.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Icon/2026092308243101.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diary/2026/09/2026092301.webp",
+				"https://raw.githubusercontent.com/mitsugu/nostrpic/main/Diary/2026/09/2026092201.webp",
+				"https://chichi-pui.akamaized.net/uploads/post_images/originals/5e718e8e-ea87-4b06-b565-ba60b9015e6f/d4d1c87b-d01a-4689-904d-dfba3350fe4f.webp",
+				"https://orzbruford.jp/202609/fig2026091702.svg",
+				"https://orzbruford.jp/202609/fig2026091601.jpg",
+				"https://i.ytimg.com/vi/pXlNu9o8-s4/sddefault.jpg",
+				"https://chichi-pui.akamaized.net/uploads/post_images/originals/e16fa1ad-1278-4b45-ab24-e67f1849aac7/e7de2170-0294-4511-9349-090ed4ae2b53.webp",
+				"https://chichi-pui.akamaized.net/uploads/post_images/originals/e16fa1ad-1278-4b45-ab24-e67f1849aac7/8e37b5b5-c7eb-422b-a84a-e5464ae89c8b.webp",
+				"https://chichi-pui.akamaized.net/uploads/post_images/originals/41d65e42-58ae-4851-9a35-a9bcfa0c15c2/333aa4be-bfe8-4c13-8ccf-ce8d6b134177.webp",
+				"https://orzbruford.jp/202609/fig2026090601.webp",
+				"https://orzbruford.jp/202609/fig2026090701.webp",
+				"https://mitsugu.github.io/likebar/202609/fig2026090303.webp",
+				"https://mitsugu.github.io/likebar/202609/fig2026090304.webp",
+				"https://mitsugu.github.io/likebar/202609/fig2026090305.webp",
+				"https://mitsugu.github.io/likebar/202609/fig2026090306.webp",
+				"https://mitsugu.github.io/likebar/202609/fig2026090308.webp",
+				"https://orzbruford.jp/202608/fig2026081901.webp",
+				"https://orzbruford.jp/202608/fig2026081604.webp",
+				"https://orzbruford.jp/202608/fig2026081101.webp",
+				"https://orzbruford.jp/202608/fig2026081102.webp",
+				"https://orzbruford.jp/202608/fig2026081103.webp",
+				"https://chichi-pui.akamaized.net/uploads/post_images/originals/0c3388d3-49ed-48f0-9a4e-d16b1dcf1309/20f736c2-cf93-4090-9281-72a16e6f7db9.jpg",
+				"https://npub1czyqt7dafpysfye9w3agpp4rcrsxnt0tr8v0t8kyu66327maxstq5ckh7u.blossom.band/108f6175ee74d15d52775f283857fd605fb7336b57583c436774d04d6fc3aeca.mp4",
+				"https://npub1czyqt7dafpysfye9w3agpp4rcrsxnt0tr8v0t8kyu66327maxstq5ckh7u.blossom.band/e6e43e7d34a437e99bc92a8c4c2845d5f6007679fa43a9879c2270971cbdcc71.jpg",
+				"https://npub1czyqt7dafpysfye9w3agpp4rcrsxnt0tr8v0t8kyu66327maxstq5ckh7u.blossom.band/2e982c0a31ef2e83164bb23fdc0b2e0d595a9ac7f349c2901190c662f6519407.jpg",
+				"https://tonteki.com/wp-content/themes/original_theme/assets/images/about-tonteki/mv.webp",
+				"https://raw.githubusercontent.com/mitsugu/customemoji/main/text/channel.svg",
+				"https://raw.githubusercontent.com/mitsugu/customemoji/main/text/7.1.channel.webp",
+				"https://cdn.comic-walker.com/integration/cdpf/resources/002658/9ad5113c-33dd-4f48-bbf5-258ef82aa38e.jpg",
+				"https://mitsugu.github.io/likebar/202606/fig2026062201.jpg",
+				"https://booth.pximg.net/3bde2849-a471-471a-b208-ccc77c491340/i/8537556/f1cee260-3dfa-48a0-a180-e79f8d58cc90_base_resized.jpg",
+				"https://booth.pximg.net/3bde2849-a471-471a-b208-ccc77c491340/i/8537556/ecbd9abb-4668-4941-b140-208d3396d9e9_base_resized.jpg",
+				"https://factory.pixiv.net/files/uploads/i/conceptual_drawing/a41a7f94-5c92-4f59-8085-49736b592da4/canvas_abb214cd7f.png",
+				"https://orzbruford.jp/202606/fig2026062101.webp",
+				"https://i.imgur.com/TLKOrvN.png",
+				"https://i.imgur.com/q0R6OOx.png",
+				"https://ae-pic-a1.aliexpress-media.com/kf/S0c9cd484dfd04d0f8ca22b0ef6d6b4c3b.jpg",
+				"https://i.imgur.com/a1xFIFZ.png",
+				"https://i.imgur.com/Ofu7DAD.png",
+				"https://static.wixstatic.com/media/8835bb_4cf73ccf0a90487d81d85d957c6fef4c~mv2.jpg/v1/fill/w_886,h_810,al_c,q_85,enc_avif,quality_auto/8835bb_4cf73ccf0a90487d81d85d957c6fef4c~mv2.jpg",
+				"https://shop.ltj-1986.com/cdn/shop/files/2-1-signal-green-fanned.jpg",
+				"https://imageengine.victorinox.com/transform/be27477a-5deb-4412-87dd-ba03f429520c/SAK_1-3713_S1?io=transform%3Abackground%2Ccolor%3AF0F0F0&io=transform%3Afit%2Cwidth%3A1200%2Cheight%3A740&quality=100",
+				"https://kakutama.com/wp-content/uploads/2017/08/climbing-glossary-mountain-seat-identification_006-1.jpg",
+				"https://cdn-public.comici.jp/episode/492537/7fc230feba596b60.webp",
+				"https://orzbruford.jp/202605/fig2026051601.webp",
+				"https://ec.mic21.com/img/goods/c/2024/2412477102_1.jpg",
+				"https://pbs.twimg.com/media/HHUHdQ9boAAdVCi?format=jpg&name=4096x4096",
+				"https://pbs.twimg.com/media/HHTRXhCasAAMZ7r?format=jpg&name=4096x4096",
+				"https://pbs.twimg.com/media/HHTQzSBa8AAZJPk?format=jpg&name=4096x4096",
+				"https://pbs.twimg.com/media/HHTQXfCakAASvUU?format=jpg&name=4096x4096",
+				"https://pbs.twimg.com/media/HHTPLBAakAATg_8?format=jpg&name=4096x4096",
+				"https://pbs.twimg.com/media/HGHjRDNa4AA48Fl?format=jpg&name=4096x4096",
+				"https://pbs.twimg.com/media/HGGXsXmbcAAouJm?format=jpg&name=4096x4096",
+				"https://stat.ameba.jp/user_images/20130521/17/72543eva/4c/fb/j/o0400030012547189642.jpg",
+				"https://www.ikomasanjou.com/upload/img/upImage/20260225151247_HP.jpg",
+				"https://images-assets.nasa.gov/image/art002e000192/art002e000192~orig.jpg",
+				"https://pbs.twimg.com/media/HE-_C4-a8AIPF99?format=jpg",
+				"https://i.imgur.com/bIdizjm.mp4",
+				"https://i.imgur.com/J0buJmk.mp4",
+				"https://orzbruford.jp/202603/fig2026031504.webp",
+				"https://i.imgur.com/r9dighW.mp4",
+				"https://image1.shopserve.jp/midori-store.net/pic-labo/91804168.jpg?t=20240112163035",
+				"https://i.imgur.com/N2tTatT.mp4",
+				"https://i.imgur.com/qYA6Og2.png",
+            	"https://booth.pximg.net/c/620x620/3bde2849-a471-471a-b208-ccc77c491340/i/7023246/115630d5-de24-4bf3-a03b-914d22cf6890_base_resized.jpg",
+            	"https://booth.pximg.net/c/620x620/3bde2849-a471-471a-b208-ccc77c491340/i/7023366/a2d3d73c-94da-486e-95ad-139917f55cfc_base_resized.jpg",
+            	"https://booth.pximg.net/c/1200x630_a3_g5_bffffff/3bde2849-a471-471a-b208-ccc77c491340/i/6990507/f0bb5597-369b-45d9-aafb-43a46dc56fd9_base_resized.jpg",
+            	"https://aisouken.blob.core.windows.net/article/532/RAG%E7%A0%94%E7%A9%B6%E3%81%AE%E3%82%BF%E3%82%A4%E3%83%A0%E3%83%A9%E3%82%A4%E3%83%B3.webp",
+            	"https://raw.githubusercontent.com/mitsugu/heritage/main/fig2025031701.png",
+            	"https://chichi-pui.imgix.net/uploads/post_images/af56c317-9583-431d-8dc5-ca5768635d7f/11156124-d4be-40ad-a7fe-877b95e28d92_1200x.jpeg",
+            	"https://mitsugu.github.io/likebar/202503/fig2025031801.png",
+            	"https://chichi-pui.imgix.net/uploads/post_images/0af979d4-6e4d-462e-b32f-cc445ecf3128/47a9a0ee-02d6-4924-b3cc-4cb8188f7052_1200x.jpeg",
+            	"https://chichi-pui.imgix.net/uploads/post_images/0af979d4-6e4d-462e-b32f-cc445ecf3128/f168f492-c463-457a-8820-700f5cfcfd5b_1200x.jpeg",
+            	"https://chichi-pui.imgix.net/uploads/post_images/9c320aa9-3c31-4c2c-b644-82620be228ec/591c6295-4685-4e8a-8548-0919e2f87c74_1200x.jpeg?auto=format&lossless=0",
+            	"https://chichi-pui.imgix.net/uploads/post_images/1025fdd2-d63b-4de8-a73a-7bd60bda78a2/5cce03fa-c688-476c-8540-75295da94081_1200x.jpeg?auto=format&lossless=0",
+            	"https://chichi-pui.imgix.net/uploads/post_images/58f4a579-e8ac-4da3-924c-43f89f1b87ab/546d18b3-1294-431e-bfdb-f6e8895f9bc5_1200x.jpeg?auto=format&lossless=0",
+            	"https://chichi-pui.imgix.net/uploads/post_images/5e0c09a7-3310-4a62-8c6f-cb80a7f47844/6baca332-7843-4819-8850-1beb3e489516_1200x.jpeg",
+            	"https://m.media-amazon.com/images/I/61wIKt5m6oL._AC_SL1500_.jpg",
+            	"https://cartown.jp/coms/843/img640/1341124405011156.jpg",
+            	"https://www.classca.jp/wp-content/uploads/2020/11/rovermini201106_1.jpg",
+            	"https://trafficnews.jp/wp-content/uploads/2021/11/112775_ph15.jpg",
+            "https://image.nostr.build/24294afb98ba819caf4c14a7eb3928c89fd2ca70f2a865808c2f2b1af07e0f5d.png",
+            "https://image.nostr.build/5a24d9d301512a97311935f54c40481b06e46fd708c18b6b627cce5d8afed119.png",
+            "https://image.nostr.build/7313ca11d5abbfda22f847b0c0d10eef756304b107aa6f0b9fcd6d9790bcb71b.png",
+            "https://image.nostr.build/2f45e190f43fadac6752d5caf0f125d7bc4736b250e5c0d5881a68ae86e69414.jpg",
+            "https://image.nostr.build/ac0be2a43b218c37cbe8210b5502b40b0c69abbd91a7c6b799ca1f84efe0bd78.jpg",
+            "https://image.nostr.build/fe5e5e75d564ced6bf926d1f12f08e74a099d2ce370d16d7cdcc8fcbdea7889e.jpg",
+            "https://image.nostr.build/4841f6bdcd5d394c852ebcf60ada6d6e43f803c7b2da1639df7be2fd2ae0eddf.jpg",
+            "https://image.nostr.build/ceb8a67a743050dc4dfaf1369a1b5dd417e85674645b668e7e45a8b1fa4592f5.png",
+            "https://image.nostr.build/bf2b6311c00063feccac8f9c184332f4284e23278f175b13735cd08779cb93ff.png",
+            "https://image.nostr.build/d864db592110ebc832d0e94d026aa86a61907a23c0583d0f9e9cebe6807582cc.png",
+            "https://image.nostr.build/6684f2c326b78f43c87da024487211958d226ec4cef4f82dbe66ae14c882c32e.jpg",
+            "https://image.nostr.build/c95eff859f598a5e25fc9c21d255d6c2dee066e56c034a7c2030e03f0d4789b1.jpg",
+            "https://image.nostr.build/7ab02e033b6e1f9ff3c9b7457e2eca0f0486e5394e20eeafddcf8a00ce022d49.png",
+            "https://image.nostr.build/c82e6b5c05f67ebfbd505add354ad36e835cd76608bd60ab44d091f148f575ec.jpg",
+            "https://image.nostr.build/c99eae91edaf8baac10414655063fb483ea1da47e07535fd718839d8e5ed9c55.png",
+            "https://image.nostr.build/0968b8f9d020783ef87d13eef03a02d1b19d7e05654c16b403b880cfb9cdb283.jpg",
+            "https://image.nostr.build/4039859bca91f97b4c2bf51d7915968976c6b1d576d929cdadbcdcf39b8ed7c1.jpg",
+            "https://image.nostr.build/dff0982a088e04f9e1f1ed075c94fcdb8c8eeee58e4fd0f67fed7a35302642ea.jpg",
+            "https://image.nostr.build/a8952dd4dedc771fa298224af851c010c2e46791c9e519f107ca0b49ea06add5.jpg",
+            "https://image.nostr.build/b7f94a1ccff050456a381c260f33424f439686b75d5d873085d5c7606b92ec13.jpg",
+            "https://image.nostr.build/7a2299ec483dc033b9a50f1dba5079718ef220f2ae33b37cf4c54dc79c7b5047.png",
+            "https://image.nostr.build/d0a2e7f825e7b7906a3a95032f6337f3e5079a13fb35a268d71f9bf19acdb2b3.jpg",
+            "https://mitsugu.github.io/heritage/fig2025031701.svg",
+            "https://mitsugu.github.io/heritage/fig2025031803.svg",
+            "https://image.nostr.build/b412672e7d3b85763caf41935f8c5f9361919ba5c0ec046e5bd043d8700bb338.jpg",
+            "https://mitsugu.github.io/likebar/202503/fig2025031701.svg",
+            "https://image.nostr.build/e5496318539a76f729f8e6c4b7a7576c660a6bebd49f719e68fe443434db0f61.png",
+            "https://image.nostr.build/ef695362a5d959e9bd49b9644787e4a573638fd1e74e73da2726572a47d628c5.png",
+            "https://image.nostr.build/d4fe9d1f2f56d935b30d1b352e50623bdb53bcef2b654517ebb5d71453ec7637.jpg",
+            "https://image.nostr.build/16d454c672a5c741f2207ebe3f5492b8c50fb74afb9be3ae028818b148c11bde.jpg",
+            "https://image.nostr.build/67c4b3fbfa76148792e11d75d33cc8eb73efb9cd18e02fd160b195bdd8495062.png",
+            "https://image.nostr.build/80163565a9f77c9b2d14ecd1ad17008dec5a84f5fb88332d18191ab05d58bc3f.jpg",
+            "https://image.nostr.build/a337121ca715651c003bd95c7bb4fcd29886238a1f55b27ccce1c4f08d46f3f4.jpg",
+            "https://image.nostr.build/ea99277dae26a610403c58e939a2934dae3702d6a910c7c7b0336f23a9f246de.jpg",
+            "https://image.nostr.build/815164025317d7f5cdf1b2645afe6d6c4964c5eb224832a4f54d35fe9d932a77.png",
+            "https://image.nostr.build/0da7fd8a071d212c99232f57385837bf91368622a8f2d2901af15e4c3c937162.png",
+            "https://image.nostr.build/9fceae50f8d2f187a8147eca8bff355ddf2c594c37e2c1929b6fa23123d9e973.png",
+            "https://image.nostr.build/dbba67e7daa3aa6bd450209886ad8821381da7154c741f1f9d03bfa40462975d.jpg",
+            "https://mitsugu.github.io/likebar/202503/fig2025031803.svg",
+            "https://image.nostr.build/8e9b2abdd9950eb929deab353bae4400a0bcdaa0fd7a8c7f0de4d88651887a90.png",
+            "https://image.nostr.build/6be1e37df6ced7d82e3dc08c3e235118ec83f25dda866ce6ef278f84d158af8f.png",
+            "https://image.nostr.build/418e97abac61cfee93ca127116b759f703063072c3f9d7ceba7ef13b98a30b00.png",
+            "https://audio.nostr.build/f40ff8e855ff0e8e936543aad9d3ca9a59c21aa4fec0bd777391afbdc22272c3.mp3",
+            "https://image.nostr.build/0c52fb2be531ff7d811e0013ac5423b377bcbf4c2deeb28833440138b6552967.jpg",
+            "https://image.nostr.build/e0347447c97ca7dd4f26efea3f50697067601a56dcfb2c517422b9135a8f2b19.png",
+            "https://image.nostr.build/ce8f92ae2c3a2254285d4a2f1251ee06950d7e0176a37f20234a2faf98e055c5.png",
+            "https://image.nostr.build/ef7a112e3fdd79c9d6a1598448d73305b534facaa1f835f5ebf1820cdf7632ac.png",
+            "https://image.nostr.build/2b9c0a878536a95265ec25777a56cd0d29db63e2f3785c9e0ef6153a7672350d.jpg",
+            "https://image.nostr.build/2c89fc248db4c42582e9b0d0ddce4df3d2b509d44c19ed4ed9befab698767f01.png",
+            "https://mitsugu.github.io/likebar/202503/fig2025031801.svg",
+            "https://image.nostr.build/d62a7c7d04c861e69b79a4b304023a53373c9580d2383b8d62d75c3eef7396f3.jpg",
+            "https://image.nostr.build/cb49dce4df9fb562c947e9d970c099e1758e72e9c9c2fb512f52537a808d8cba.jpg",
+            "https://image.nostr.build/5e2e73d4eba430e9c32ddd62fb428051e2ddfcbf478a2975e94242cac98bdf8f.png",
+            "https://image.nostr.build/7d864ccc81e09acb084d5fa18aa1852e7ebd1bd1dc6750eb08566eb4757490e9.jpg",
+            "https://image.nostr.build/ed29141856065a021a7c90bcb6bca1240191b2f814f1eb2b14ebabf6f22503ee.jpg",
+            "https://image.nostr.build/0ee89dd850e17ac6fce5a3a7ca5074d4237478a601296dbd18859a048df454c0.jpg",
+            "https://image.nostr.build/765a642b247f13abd8eab32f0b8961aeb6ba6c7aeae78b9f5890a7eea1043056.jpg",
+            "https://image.nostr.build/43e266d2d7b37e4234ec7af3dee4c37d730d43976fe6bc30107510c7db87cd4e.png",
+            "https://audio.nostr.build/2d8fafcf4ac6a00df71d71ed948c25c424a818e4d016c6efda1bcd28fb791c57.mp3",
+            "https://image.nostr.build/bd6fa8c999db75ba6fdbe337d3e4b219ff9e5c0d43dc7cdfcab3ab211448669b.png",
+            "https://image.nostr.build/44b87a940e4b52e8e21ea47c9f2df9a1e31b77cea7e0d118f18a806ac9ea547c.png",
+            "https://image.nostr.build/1470c7f64136b814ff15858bd64028222ada5da4b26f8263acd94def867028e0.png",
+            "https://image.nostr.build/7db09fe6618da1ed8c8b499f2e6d2ca0476012d4c7dbb6691b864bccaf945b05.png",
+            "https://image.nostr.build/e040989b5e08db545064a0d9f39df212fbd6eaac61c02defad1184d9c680c051.jpg",
+            "https://image.nostr.build/b2136458cc5c02b90ae32de18641511cf7c16b1c449aaf514496715c4cce7ba2.png",
+            "https://image.nostr.build/ca067c098797611b0760b46272f96e53c25fdaf731e2b224e1dc3c1c0c17bf65.png",
+            "https://image.nostr.build/4306b277e28edea0200116cd06bd24c6636259c3cbe4b8327e53d2f8c125b458.png",
+            "https://image.nostr.build/a12d0b88365c89d89127d7ede4120940655d8af331edf35f8752c44a86b34025.png",
+            "https://image.nostr.build/fe381ba63a94a76a2ea2d2ea70d438aa85e2d748fb5e69c62da15f30732a4bae.png",
+            "https://image.nostr.build/3c6c8d43dca5953ded59a9f79a7dbbeb9237c78064d93acce9314338af70c89c.png",
+            "https://image.nostr.build/93ad3ee3eab43f7624e98e65c1e795043437e4095f0ed4c5744be17c6c87e882.png",
+            "https://image.nostr.build/65d84a6f0bc852d1fddf258259608315ead2b6ba3f6bc20e769818cf37434499.png",
+            "https://image.nostr.build/1d1ff90f796dcec162d6a1927836beb13ad267ea4bca767bd0a1ce72b6542a1a.png",
+            "https://image.nostr.build/eea6e8e64a486a7fe8ad2c13964a4334fa745f72d01be1ad5e610b7271de2cf8.png",
+            "https://image.nostr.build/09721f7a90ae7806d8129c116f70e0c859efe851d660e861d734b7fb120ff45a.png",
+            "https://image.nostr.build/8d9b543d149d95fe5ebd3f2a704aed969a82435ffd359695451bf6b84435cc94.png",
+            "https://image.nostr.build/902ccc4e853368bb0486137abb2c9c91bca2e6f2668df7dbb0dce509efb66707.png",
+            "https://image.nostr.build/2b67b125e75fb77795fd35350a81acaa785456526042238da71f11b2623cccbc.jpg",
+            "https://image.nostr.build/f305e073eafa8132afe4d4f82107d0638a0884b9ab0a52508c01c29c5bcd61b3.png",
+            "https://image.nostr.build/f305e073eafa8132afe4d4f82107d0638a0884b9ab0a52508c01c29c5bcd61b3.png",
+            "https://image.nostr.build/049e541e35b3a430430c1654d885362db5081a69e9b6ebc5f0c5be72d31f3d9d.jpg",
+            "https://image.nostr.build/241d693feff6012b702122ae63b6c9aa344d0b4904c612d1d81f82884513ac06.png",
+            "https://image.nostr.build/7e12dc5bddbee7b1503ce4611a92b75e35c7fe02405945309c1d5bfc2d42fe7a.jpg",
+            "https://image.nostr.build/f8bd360b024721b932d31c576ff8b5e6838b00513dbf2daa00c22b0c2774893b.png",
+            "https://image.nostr.build/7d6db0833df1de087b3f6384496328957506d843aa1bd8c92b087d182c7c6d7b.png",
+            "https://image.nostr.build/cf5f7ff3ec5afddadedf16f0eda43f4c88b3397aedfeff86f06c9411d10b3a15.jpg",
+            "https://image.nostr.build/c3dd07e6d00a8fcfe49817fee791330766e533b0d78f38904d16b47cbb91529b.png",
+            "https://image.nostr.build/6a4be0e3d459c87ccddb08128045eb36e6098aec08ff5cc82a75cf7cce95f248.png",
+            "https://image.nostr.build/fddc3d93a9892cf43ef39c5640f8c027574d5a6bdd40f9558d12f33aed05e13c.png",
+            "https://image.nostr.build/a0afac2cb9ac192c4407ac85e2cfc7c5c61588e6339367852d7bcaf2bc48cb6b.png",
+            "https://image.nostr.build/53cdbe2e7a19f0912d7c5c1f3b359a2ad78297e48900d39d5db4259808959381.png",
+            "https://image.nostr.build/f38a38602f67a86c3601356cd0c7a654e0b6077d15540c3c7ec90ef261f04e8c.png",
+            "https://image.nostr.build/3f4bc49561797a53af93f1ab79c12ba8a61c4d2d8c762a81e663067c52de677c.jpg",
+            "https://image.nostr.build/464828ba89319e129a5a7203cfddc198bdae7807a1b0533bf8411579d7a1f6e7.png",
+            "https://image.nostr.build/d16866d4b65436d0381180282bb281b246c6a3cfb4c297c30413f79b3bc0dc6a.png",
+            "https://image.nostr.build/d69908fd998c1c7e5eb55e5134ba305c13542120714bc5abc1508b74d19adc84.png",
+            "https://image.nostr.build/19bc83d2f7a542291245dbecfe65e4f879cf6afd85e9bcc24b90118f2fd1dcec.png",
+            "https://image.nostr.build/d957f5d93dd60c8eaee3e8b98c287ad9d4a8b25a8bd5f8ca2f0b932b6fde40a4.png",
+            "https://image.nostr.build/752ef5dad2b14130e12f72f5a7428b2fb945840ca177d8c25b002c727a4af682.png",
+            "https://img.giftmall.co.jp/r/c1000x1000/ea21/0109/ea210109-435b-4870-ae40-f89b2a8e567f.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/c/c8/Bruno_WWWF_Champion.jpg",
+			"https://alu-web-herokuapp-com.global.ssl.fastly.net/cropped_images/4V4FVuroupeNjl7r0CjvNNfI1UT2/c_1597241256580?auto=webp&format=jpg&width=1360",
+            "https://wisard-hp.com/blog/wp-content/uploads/%E5%80%8D%E8%BF%94%E3%81%97%E3%81%A0%EF%BC%81.jpg",
+            "https://image.nostr.build/7f4a1e9f158338afba78d15cc63697eb0c0486d8d2409ee5fad78f0bc8e633f9.png",
+            "https://image.nostr.build/2fc93c08b5cf37a3214e37a3d47f753627f97a49a934f0a50b3d28d85f59a245.jpg",
+            "https://image.nostr.build/7e569ab6216c459ea9a0dbb8f2a9518db2a449c8f3afcfdb1c157e0cfce6df77.jpg",
+            "https://image.nostr.build/bfa0698da3bc2ff32b7550138f4492ef022622b966272700a79769a036f9b6db.jpg",
+            "https://image.nostr.build/9a56b55ccafb9a043480758200b8dd62b3570408fb5ffe2698b5ff9d44b63bd8.jpg",
+            "https://image.nostr.build/bd917c14cb37ddbf8ebc3a4ef244f5284277ed03191235936bd674d75e34b142.jpg",
+            "https://image.nostr.build/dadfc40e47a93453f5a6014384a526c105300fcd08280920e20be9917e8a3a87.jpg",
+            "https://image.nostr.build/e2c36a9e4d2cbea65edfef5ccfe75662d4f319b39419027564bc4628972fbacf.jpg",
+            "https://image.nostr.build/d66112af29eb2af413164af682216f6e6e6936c7a7f92db076258ca1b7122841.png",
+            "https://image.nostr.build/96311c761d9ab51dcdb2d74fb8fc056408f59c610f8b1ddee1d58571e5c7c715.png",
+            "https://image.nostr.build/f74ae155c2836e8c0a2a73aa26398b98616ffda0fa347d6ab248ef4d632ddb9c.png",
+            "https://image.nostr.build/12d6f4c7c59300a45bcb6dd4d358f45219bd2c62588ad08724669e5bec1008cc.png",
+            "https://image.nostr.build/8e06723a6e765f92a6a8afabf09c71f2d40f7398ffea65ab8728467d5ffe70bd.png",
+            "https://image.nostr.build/0cb7a419cae4703b54b8780b5b2f50ece3e77e5a394d3092f730c9b29544ab09.png",
+            "https://image.nostr.build/eaee99602d60f9b03f18a5317a2fdc590b31ba25b8e2641c49e6d6a3cda6aa7e.png",
+            "https://image.nostr.build/b8c663f44730ec1c9215ed7b8e9a473114ea890905ff0862154fd08d772d2602.png",
+            "https://image.nostr.build/da926c72399b40416919d36db44e280821ffecef9a46ca0091138a786836aaa2.jpg",
+            "https://image.nostr.build/c9c47b88a537f5203433e6fac9cee4c6ed291339961864189840f03a24458735.png",
+            "https://image.nostr.build/b974993f75f9654917db294019d1fc249e8ec4e9da92f3c026e635e30a4406ca.png",
+            "https://image.nostr.build/81f5a77150d74063dd409a1f43cef42bcabbac2159b4417b1b3d2c982c652280.png",
+            "https://image.nostr.build/e4236563d3e13af7fcacaff4920c36f8083a7b86d1e421d98d9bfa759f052f07.png",
+            "https://previews.123rf.com/images/iakovenko/iakovenko1709/iakovenko170900680/86176331-%E6%8A%80%E8%A1%93%E3%82%B9%E3%82%BF%E3%83%83%E3%83%95%E3%81%AF%E3%80%81%E9%A3%9B%E8%A1%8C%E5%A0%B4%E3%81%A7%E4%BB%95%E4%BA%8B%E3%81%97%E3%81%AA%E3%81%8C%E3%82%89%E4%BF%9D%E8%AD%B7%E3%82%A4%E3%83%A4%E3%83%BC%E3%83%9E%E3%83%95%E3%82%92%E7%9D%80%E7%94%A8%E3%81%97%E3%81%BE%E3%81%99%E3%80%82%E5%BD%BC%E3%81%AF%E3%82%AB%E3%83%A1%E3%83%A9%E3%82%92%E6%8C%AF%E3%82%8A%E8%BF%94%E3%81%A3%E3%81%A6%E3%81%8F%E3%81%A0%E3%81%95%E3%81%84%E3%80%82.jpg",
+            "https://stat.ameba.jp/user_images/20120308/11/mini3298j/75/f1/j/o0477035811838972588.jpg",
+            "https://stat.ameba.jp/user_images/20230326/15/nkk110/4e/25/j/o1080081015260868891.jpg",
+            "https://www.ehonnavi.net/img/cover/350/350_Ehon_139.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/9/99/Greater_white-fronted_goose_in_Central_Park_%2895561%29.jpg",
+            "https://camerafan.jp/dat/blog/1033/1723102288126.jpg",
+            "https://raw.githubusercontent.com/mitsugu/customemoji/refs/heads/main/nyanpuppu/Apache%20License%202.0/ablobcat_cheer_purple.webp",
+            "https://raw.githubusercontent.com/mitsugu/NostrTextPictures/refs/heads/main/greeting/oha_nostr.32.webp",
+            "https://img.hmv.co.jp/image/jacket/400/00/9/4/062.jpg",
+            "https://assets.st-note.com/production/uploads/images/97502921/rectangle_large_type_2_2d04fddfc86f94c69ababeec80dda8d2.jpeg?width=4000&height=4000&fit=bounds&format=jpg&quality=90",
+            "https://raw.githubusercontent.com/mitsugu/customemoji/main/eng/justAMinuts.webp",
+            "https://raw.githubusercontent.com/mitsugu/customemoji/main/text/2.2.honshitsu_jouhou.webp",
+            "https://img07.shop-pro.jp/PA01256/285/product/167978408.jpg?cmsp_timestamp=20220428194023",
+            "https://nostter.app/logo.png",
+            "https://upload.wikimedia.org/wikipedia/commons/3/39/Japan_National_Route_18_Map.png",
+            "https://user0514.cdnw.net/shared/img/thumb/ramenPAR575952528_TP_V.jpg",
+            "https://raw.githubusercontent.com/Lokuyow/Lokuyow.github.io/main/images/nostr/emoji/5000chousats_hoshii.webp",
+            "https://www.grblog.jp/wp-content/uploads/article/27353/R010696.jpg",
+            "https://www.mcdonalds.co.jp/product_images/1689/9279.m.webp",
+            "https://www.kazumiwatanabe.net/_src/13687955/71wuuc1gotl._ac_ul320_.webp",
+            "https://m.media-amazon.com/images/I/61SDy2gnp+L._UX250_FMjpg_QL85_.jpg",
+            "https://m.media-amazon.com/images/I/81+-IuQTk-L._AC_SL1400_.jpg",
+            "https://pbs.twimg.com/media/GYm0RfdasAAlRqf.jpg",
+			"https://i.imgur.com/n456Gdw.mp4",
+			"https://i.imgur.com/KBMVesY.mp4",
+			"https://i.imgur.com/EssHWDQ.mp4",
+			"https://i.imgur.com/r9dighW.mp4",
+			"https://i.imgur.com/hMGjDys.mp4",
+			"https://i.imgur.com/xmrRXMg.jpeg",
+			"https://i.imgur.com/N2tTatT.mp4",
+			"https://i.imgur.com/Ws6DxNE.gif",
+			"https://i.imgur.com/270IjXF.gif",
+			"https://i.imgur.com/cjb7zqP.png",
+			"https://i.imgur.com/mukFvDV.png",
+			"https://i.imgur.com/1NDAC2j.jpeg",
+			"https://i.imgur.com/z1DBggu.mp4",
+			"https://i.imgur.com/iTv6hjK.jpeg",
+			"https://i.imgur.com/q1GOMAS.png",
+			"https://i.imgur.com/gflC6I0.png",
+			"https://i.imgur.com/45gd21X.png",
+			"https://i.imgur.com/45gd21X.png",
+			"https://i.imgur.com/L4QG67J.png",
+			"https://i.imgur.com/08yrYvf.png",
+			"https://i.imgur.com/0b0Wj9w.jpeg",
+			"https://i.imgur.com/EY4ndrC.jpeg",
+			"https://i.imgur.com/S9SGmyY.jpeg",
+			"https://i.imgur.com/ayOMbqj.jpeg",
+			"https://i.imgur.com/9uOePXx.jpeg",
+			"https://i.imgur.com/Q7xnlCK.png",
+			"https://i.imgur.com/pJFuEnx.png",
+			"https://i.imgur.com/Cd63tG3.jpeg",
+			"https://i.imgur.com/xv2v5Iw.jpeg",
+			"https://i.imgur.com/HhS0K7O.jpeg",
+			"https://i.imgur.com/OMjiTtm.png",
+			"https://i.imgur.com/5vzhE5G.jpeg",
+			"https://i.imgur.com/nEX6bs6.jpeg",
+			"https://i.imgur.com/07mZoMy.jpeg",
+			"https://i.imgur.com/wrgRcxM.jpeg",
+			"https://i.imgur.com/E3oHSKM.jpeg"
+        ];
+
+        const container = document.getElementById('media-container');
+        const lightbox = document.getElementById('lightbox');
+        const lightboxBody = document.getElementById('lightbox-body');
+        const modalCopyBtn = document.getElementById('modal-copy-btn');
+
+        const isVideo = (url) => url.toLowerCase().endsWith('.mp4');
+        const isAudio = (url) => url.toLowerCase().endsWith('.mp3');
+
+        // 動画用の遅延読み込みObserver設定
+        const videoObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const video = entry.target;
+                    video.src = video.dataset.src;
+                    video.preload = "metadata";
+                    observer.unobserve(video);
+                }
+            });
+        }, {
+            rootMargin: "0px 0px 300px 0px"
+        });
+
+        const fragment = document.createDocumentFragment();
+
+        mediaUrls.forEach(url => {
+            const item = document.createElement('div');
+            item.classList.add('gallery-item');
+
+            const thumbWrapper = document.createElement('div');
+            thumbWrapper.classList.add('thumb-wrapper');
+            thumbWrapper.onclick = () => openLightbox(url);
+
+            if (isVideo(url)) {
+                // 動画の処理
+                const video = document.createElement('video');
+                video.dataset.src = url + "#t=0.1";
+                video.preload = "none";
+                video.muted = true;
+
+                thumbWrapper.appendChild(video);
+                thumbWrapper.classList.add('video-indicator');
+                videoObserver.observe(video);
+
+            } else if (isAudio(url)) {
+                // 音声の処理
+                const audioIcon = document.createElement('div');
+                audioIcon.style.color = "white";
+                audioIcon.style.height = "100%";
+                audioIcon.style.width = "100%";
+                audioIcon.style.display = "flex";
+                audioIcon.style.flexDirection = "column"; 
+                audioIcon.style.alignItems = "center";
+                audioIcon.style.justifyContent = "center";
+                audioIcon.style.padding = "10px";
+                audioIcon.style.boxSizing = "border-box";
+
+                const fileName = url.substring(url.lastIndexOf('/') + 1).split(/[?#]/)[0];
+
+                audioIcon.innerHTML = `
+                    <div style="font-size: 32px; margin-bottom: 8px;">🎵</div>
+                    <div style="font-size: 12px; width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">
+                        ${fileName}
+                    </div>
+                `;
+                
+                thumbWrapper.appendChild(audioIcon);
+
+            } else {
+                // 画像の処理
+                const img = document.createElement('img');
+                img.src = url;
+                img.loading = "lazy";
+                thumbWrapper.appendChild(img);
+            }
+
+            const info = document.createElement('div');
+            info.classList.add('item-info');
+            const btn = document.createElement('button');
+            btn.classList.add('copy-btn');
+            btn.textContent = "URLをコピー";
+            btn.onclick = (e) => { e.stopPropagation(); copyToClipboard(url); };
+
+            info.appendChild(btn);
+            item.appendChild(thumbWrapper);
+            item.appendChild(info);
+            fragment.appendChild(item);
+        });
+
+        container.appendChild(fragment);
+
+        function openLightbox(url) {
+            lightboxBody.innerHTML = ''; 
+
+            if (isVideo(url)) {
+                const video = document.createElement('video');
+                video.src = url;
+                video.controls = true;
+                video.autoplay = true;
+                video.classList.add('lightbox-content');
+                lightboxBody.appendChild(video);
+            } else if (isAudio(url)) {
+                const audio = document.createElement('audio');
+                audio.src = url;
+                audio.controls = true;
+                audio.autoplay = true;
+                lightboxBody.appendChild(audio);
+            } else {
+                const img = document.createElement('img');
+                img.src = url;
+                img.classList.add('lightbox-content');
+                lightboxBody.appendChild(img);
+            }
+
+            lightbox.classList.add('active');
+            modalCopyBtn.onclick = () => copyToClipboard(url);
+        }
+
+        function closeLightbox() {
+            lightboxBody.innerHTML = '';
+            lightbox.classList.remove('active');
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById('toast');
+                toast.style.opacity = "1";
+                setTimeout(() => toast.style.opacity = "0", 2000);
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === "Escape") closeLightbox();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Gallery (Image & Video & Audio)</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --accent-color: #007bff;
+        }
+
+        body { font-family: sans-serif; background: var(--bg-color); padding: 20px; }
+        h1 { font-size:2.5rem; text-align:center; }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .gallery-item {
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .thumb-wrapper {
+            width: 100%;
+            height: 180px;
+            cursor: pointer;
+            background: #000;
+            position: relative;
+        }
+
+        .thumb-wrapper img, .thumb-wrapper video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-indicator::after {
+            content: "▶";
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.8);
+            font-size: 30px;
+            pointer-events: none;
+        }
+
+        .item-info { padding: 10px; display: flex; justify-content: center; }
+        .copy-btn {
+            background: var(--accent-color); color: white; border: none;
+            padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+        }
+
+        .lightbox {
+            display: none; position: fixed; z-index: 1000;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox-content {
+            width: 90vw;
+            height: 80vh;
+            object-fit: contain;
+            outline: none;
+        }
+        video.lightbox-content {
+            background-color: #000;
+        }
+        .close-btn { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; cursor: pointer; }
+
+			.toast {
+				position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+				background: #333; color: white; padding: 10px 20px; border-radius: 20px;
+				opacity: 0; transition: opacity 0.3s; pointer-events: none;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Media Gallery</h1>
+		<div class="gallery" id="media-container"></div>
+
+		<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+			<span class="close-btn">&times;</span>
+			<div id="lightbox-body" class="lightbox-content" onclick="event.stopPropagation()">
+			</div>
+			<div style="margin-top:20px;">
+				<button class="copy-btn" id="modal-copy-btn">URLをコピー</button>
+			</div>
+		</div>
+
+		<div id="toast" class="toast">URLをコピーしました！</div>
+
+		<script>
+			const mediaUrls = [
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/e9f00667321d0b5a2d4985fb84b2b5a41badd7a639010e828b6094ad48d44df8.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/112c367e70d380fe4cbd4ff1d0db5207f78ca59e5e0a915ef9ccf54320d8c5e8.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/bf78e0c022e2a2da5709dd350ce616c6f6cf6dc968f2a51383efffd9436f8e32.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/4a8686b50775415a713dc3886d43dfd8269daa37b032fe9914bf43172ecddec3.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/004e8ac0edca9126dacb88d8f2abf7cbfa4ba8c3219013ba1a35e2ef6fe0c9c3.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/4eb3d68ba2a41106d47fce232820cec322e67ccac1feee43d1460b66223bd3fb.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/985a4cdb8a6dfb34b85a010047438b67a3039f50486ddd8430d2d822b041ca69.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/a66b42e862e918f7ef76022124cc1ee14f6d5a2e0f1e24ef272e542b49e6d0fb.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/32ef264f9ed49995d6ffc885cfe1c178ebc1ad440d68fdd6f26665a99d639b15.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/27f6769c3247cb0c2ab2d4866c03e05a69462ad20f0c9629eb418a020f57ebcb.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/71e9758e82248990027c5eef78ca56f01e8994e8440328860b1a157d47085b12.webp",
+				"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/f8239adfe4158c68cc9b866a26e91db5bb2f610c454e084f912d4bffb324a745.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/5610d6a42515aa71a1901fca6da4775fd8aed8843b2d140efa84e2ce1ee46481.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/20648a19eefca0ce3a5c3589416facb096624a563e9970ff33f07cf2d5a099d1.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/5610d6a42515aa71a1901fca6da4775fd8aed8843b2d140efa84e2ce1ee46481.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/b06cbabe22577f9b948e9b13b1f611ebfe0b27928a51fb34778bd1145411cd20.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/adad5ac43426dd6a9a1c270c6482843b2b8aa653e02ac5babe0afa9c731b6b9b.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/a57f41509ca8e73f1d17d3865218fe6d7eda21db85af9dbb5d73a110f0863ba7.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/23778f098a98b38eeb8f1bce88d7eafd0990610ccbb924d6a0787dcda10ddcfe.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/53b8190669766780953261534641accc4b87e20401e91a86405543bbf59ca218.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/5b84b567a3990c301951470fa37c1a70286a7ac68a639615fee44646d51c6db3.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/933b877a9b0c5c7b7be6905b1431f42a7c1599cd759202f7c027926935a623d1.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/395b92e2088868f378f1948fb947cac02b80644b4e406af9fdfdc504b58a81eb.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/0ba0c4ece8eea0fe22012a3bd865be3d44f0ac575e18966541f7211a4c86bab4.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/87b7884f8bd259dd0dda440900454402cd3c2caa40be626b483f8e5ca40da2fe.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/a0d8772c33f0b2d5059a2b13dc0541aa89be5d2192c26009b1743c1006903ae3.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/85f4d478bb14530b7136021126e51bd87c9d81f3ccd86c5192e23a6d8cf9f744.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/1764ef76f31fac0ac9a3ab9d995000a12402b342093ca66bbecca78d3a1a28ea.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/63aa004e011f84c2ac9f68c9306a7507f71beb8189b6b1e0023bf7950b341535.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/5538893f926f4a8a91a4539bfcf6dc4b1ee237c1827c680f4f6e7e21073c2325.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/a49b8a5aa13dcfd3383b7dcc5872013f0b9b21390f45b8f91815dc5db80ac442.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/de7785c45f319b8454ba7d3de316abaa74e1521cd9a3d218fbc440bc46ee11b2.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/53f39b1bc6989e59cd3e54f99e7e93af3f2e5ee8e8c065c8479be9deaa757d34.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/e5a3b193321e95af829be078a61218bccb3d848699e20c5df50c951ca40a479d.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/0d8ed3275941a6a4266332928778bd1a7bce5ce09da2ee5962e1d7bb9417223f.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/e6bed258bd5ab2cafdcfa6b3d7f82069fcb130043cc31eb9c78d99bf09e1356c.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/e7569e570252b18d7b4d13ad12a51581a937473f6a5dba6d01d0f3969e6a55ed.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/49cd1041f2dba22c3ce16150da9508bf9d1a5b6d5a7a94f3e4cfe5d76539db42.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/827889fafe090ac2c8d8c1d5d9efd9fe27b17a932a88e5b975f69ebdf49cb883.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/3081cb21c1938de9753021771aed0e9f4777a1ad51138b796faaae89084fea08.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/cd901e412fcd9ff7247d1242eaf92c8f329c884740921375e0230477f5fe5b09.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/2686b0f64f70b3b5b98bdf95181b71ae10791929765022a78e4f377d9deccfe5.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/e686664f30543a77394dbc487195fafa8e5835fb9e262f6a9d1aaf43d5ac5d3a.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/fe918e5ca14c7ce7c9079b69716853dad099f49c3b60716940d645c786434080.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/9f30635d3aafc4eb11d94482c81af081c9555798a319f8d19e2e3b8712bf7915.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/545d305a8fa304b33db2aae4b2fee4e8fd26d8fffe40bef6bdfd453926b245a5.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/87d16eeb80fc3df79733d80955061c98c1a9e8d81d287e35ccc7d1f8ed7f915f.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/4e5d075117bde372c77b8060886520dba2a7acef8a3efe0b6fca3e79e132d9d4.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/428fdc740e0a956f9ec88b580f2b09788c1edea87b31d51e047eadcab00ed301.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/7c857dd354b5319dc1967db16be88613d1bcd17a653b21ba2e53a55ea1897a6f.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/037647a6e77f0021d1c10d4f98630cbfe13e35b831a225af551a2ac9c64afe6f.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/30378b87803113c3e97f7a7c0f6fed6bcdea45aa1d7df37c84de899c4eefbe4e.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/72baa266bb19bd8b762a58e72d7b05b34c643f7d68f4a61addf000ce033c21f4.webp",
+            	"https://nostpic.com/media/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/0bcf352d64d0beca6da4af5c6fce63b6e92da842de17d97b1007f78819b8a4d8.webp",
+        ];
+
+        const container = document.getElementById('media-container');
+        const lightbox = document.getElementById('lightbox');
+        const lightboxBody = document.getElementById('lightbox-body');
+        const modalCopyBtn = document.getElementById('modal-copy-btn');
+
+        const isVideo = (url) => url.toLowerCase().endsWith('.mp4');
+        const isAudio = (url) => url.toLowerCase().endsWith('.mp3');
+
+        // 動画用の遅延読み込みObserver設定
+        const videoObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const video = entry.target;
+                    video.src = video.dataset.src;
+                    video.preload = "metadata";
+                    observer.unobserve(video);
+                }
+            });
+        }, {
+            rootMargin: "0px 0px 300px 0px"
+        });
+
+        const fragment = document.createDocumentFragment();
+
+        mediaUrls.forEach(url => {
+            const item = document.createElement('div');
+            item.classList.add('gallery-item');
+
+            const thumbWrapper = document.createElement('div');
+            thumbWrapper.classList.add('thumb-wrapper');
+            thumbWrapper.onclick = () => openLightbox(url);
+
+            if (isVideo(url)) {
+                // 動画の処理
+                const video = document.createElement('video');
+                video.dataset.src = url + "#t=0.1";
+                video.preload = "none";
+                video.muted = true;
+
+                thumbWrapper.appendChild(video);
+                thumbWrapper.classList.add('video-indicator');
+                videoObserver.observe(video);
+
+            } else if (isAudio(url)) {
+                // 音声の処理
+                const audioIcon = document.createElement('div');
+                audioIcon.style.color = "white";
+                audioIcon.style.height = "100%";
+                audioIcon.style.width = "100%";
+                audioIcon.style.display = "flex";
+                audioIcon.style.flexDirection = "column"; 
+                audioIcon.style.alignItems = "center";
+                audioIcon.style.justifyContent = "center";
+                audioIcon.style.padding = "10px";
+                audioIcon.style.boxSizing = "border-box";
+
+                const fileName = url.substring(url.lastIndexOf('/') + 1).split(/[?#]/)[0];
+
+                audioIcon.innerHTML = `
+                    <div style="font-size: 32px; margin-bottom: 8px;">🎵</div>
+                    <div style="font-size: 12px; width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">
+                        ${fileName}
+                    </div>
+                `;
+                
+                thumbWrapper.appendChild(audioIcon);
+
+            } else {
+                // 画像の処理
+                const img = document.createElement('img');
+                img.src = url;
+                img.loading = "lazy";
+                thumbWrapper.appendChild(img);
+            }
+
+            const info = document.createElement('div');
+            info.classList.add('item-info');
+            const btn = document.createElement('button');
+            btn.classList.add('copy-btn');
+            btn.textContent = "URLをコピー";
+            btn.onclick = (e) => { e.stopPropagation(); copyToClipboard(url); };
+
+            info.appendChild(btn);
+            item.appendChild(thumbWrapper);
+            item.appendChild(info);
+            fragment.appendChild(item);
+        });
+
+        container.appendChild(fragment);
+
+        function openLightbox(url) {
+            lightboxBody.innerHTML = ''; 
+
+            if (isVideo(url)) {
+                const video = document.createElement('video');
+                video.src = url;
+                video.controls = true;
+                video.autoplay = true;
+                video.classList.add('lightbox-content');
+                lightboxBody.appendChild(video);
+            } else if (isAudio(url)) {
+                const audio = document.createElement('audio');
+                audio.src = url;
+                audio.controls = true;
+                audio.autoplay = true;
+                lightboxBody.appendChild(audio);
+            } else {
+                const img = document.createElement('img');
+                img.src = url;
+                img.classList.add('lightbox-content');
+                lightboxBody.appendChild(img);
+            }
+
+            lightbox.classList.add('active');
+            modalCopyBtn.onclick = () => copyToClipboard(url);
+        }
+
+        function closeLightbox() {
+            lightboxBody.innerHTML = '';
+            lightbox.classList.remove('active');
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById('toast');
+                toast.style.opacity = "1";
+                setTimeout(() => toast.style.opacity = "0", 2000);
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === "Escape") closeLightbox();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Gallery (Image & Video & Audio)</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --accent-color: #007bff;
+        }
+
+        body { font-family: sans-serif; background: var(--bg-color); padding: 20px; }
+        h1 { font-size:2.5rem; text-align:center; }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .gallery-item {
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .thumb-wrapper {
+            width: 100%;
+            height: 180px;
+            cursor: pointer;
+            background: #000;
+            position: relative;
+        }
+
+        .thumb-wrapper img, .thumb-wrapper video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-indicator::after {
+            content: "▶";
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.8);
+            font-size: 30px;
+            pointer-events: none;
+        }
+
+        .item-info { padding: 10px; display: flex; justify-content: center; }
+        .copy-btn {
+            background: var(--accent-color); color: white; border: none;
+            padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+        }
+
+        .lightbox {
+            display: none; position: fixed; z-index: 1000;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox-content {
+            width: 90vw;
+            height: 80vh;
+            object-fit: contain;
+            outline: none;
+        }
+        video.lightbox-content {
+            background-color: #000;
+        }
+        .close-btn { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; cursor: pointer; }
+
+			.toast {
+				position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+				background: #333; color: white; padding: 10px 20px; border-radius: 20px;
+				opacity: 0; transition: opacity 0.3s; pointer-events: none;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Media Gallery</h1>
+		<div class="gallery" id="media-container"></div>
+
+		<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+			<span class="close-btn">&times;</span>
+			<div id="lightbox-body" class="lightbox-content" onclick="event.stopPropagation()">
+			</div>
+			<div style="margin-top:20px;">
+				<button class="copy-btn" id="modal-copy-btn">URLをコピー</button>
+			</div>
+		</div>
+
+		<div id="toast" class="toast">URLをコピーしました！</div>
+
+		<script>
+			const mediaUrls = [
+"https://share.yabu.me/9f6f4b7df00891e82bc282ff386bcdec5cf747e14bfac8433f49097dee2c59d8.webp",
+"https://share.yabu.me/338a35fbd77bc804f4c77caf15657efbc8f1de7770bcb736b6512ce63c57e7b2.webp",
+"https://share.yabu.me/9f6f4b7df00891e82bc282ff386bcdec5cf747e14bfac8433f49097dee2c59d8.webp",
+"https://share.yabu.me/b36e1e021c800a73b381b11d3a0d76dbcb215c390503375b8bb76ab0f60085e2.webp",
+"https://share.yabu.me/c08805f9bd4849049325747a8086a3c0e069adeb19d8f59ec4e6b5157b7d3416/ac85b5213c19f311126d9cfba1eaccdb1deca262e139ea63eb2a59565ff52d47.webp",
+"https://share.yabu.me/4af763966f98956cfcdffba9db44e3aa646c24189fa861ed923444992eb44fda.webp",
+"https://share.yabu.me/76a159b54b8d951cfa7e832ab04f0112a7c4c45be0d4970a0b5ab652de3137e4.webp",
+"https://share.yabu.me/6fae740846801688ade1fbee62933c1ac97f623e552e964334e7c2b0669c85ed.webp",
+"https://share.yabu.me/6678f8ad014b3ba3769f8dd396fb808580da577cee9c726ca9a38948bef85263.webp",
+"https://share.yabu.me/e9fc81b24ba15cd7583b44e4a8d144bbe1f2bcb6a0e8e24423560f6d7ccb22ba.webp",
+"https://share.yabu.me/fb690544a4a76d5fd9e8f9575b792596d8df206a2b442e16affe43b209218631.webp",
+"https://share.yabu.me/8ec8087641aa47512440bc35398e4a5d48ac433e5e71ab25b478907246e49a73.webp",
+"https://share.yabu.me/6bf421408791389677b425915cbb92dedd33c0279b15b77ee94a6a88ef462990.webp",
+"https://share.yabu.me/91fc3dfc03874d061811be8c26b9709989e1e6a66aa4b9dd28cb2605cc2ed7ff.webp",
+"https://share.yabu.me/e5cc627949d099c1d13d309aa0d19178fa45eecb1e5390acd93d63d030b73ed6.webp",
+"https://share.yabu.me/787258f804eac30b6c7b834b43336c5dc8c2eed34447ccd115724dbd4318bb59.webp",
+"https://share.yabu.me/02e902f8055418b3277fc671dc58435ba77d3b790d5b99df668cd4de344733f5.webp",
+"https://share.yabu.me/c6034c47a080484b50dbbd1f511421cbcf68175355d8ee8051eb15afa46db9b9.webp",
+"https://share.yabu.me/abbdaae60f8978c9d8dd1f903d0347dc077e0a790741b1a12f790f3612bc6cba.webp",
+"https://share.yabu.me/b06212baad1a09aeb5a2f48f0d2da714b82eb3666e1c73faf5a76c6d42067114.webp",
+"https://share.yabu.me/292ff20053f0e4c815e57b03dd183e757bcdd2aa421d977b3b887f65dc922fec.webp",
+"https://share.yabu.me/bb24b27506f864aa686511214ed88b32031e4aba094e547cae4f6004a570d715.webp",
+"https://share.yabu.me/164d66981dac1eece88c47e1150c1383bca69fc6a20e451ff22ec3d83c33cf15.webp",
+"https://share.yabu.me/f35b76f47e3aac8f03e3a0c97dd86a935f58f262d1bdb09c8a65cc29f43173b2.webp",
+"https://share.yabu.me/2ed9f4bf5779165f37955dbea9869a1f8af98aed593680629cd5108226451c41.webp",
+"https://share.yabu.me/342d3f13d3ea9f6208db75eff708e9d2b6eccddb3b06b0be0d1e68a11318e069.webp",
+"https://share.yabu.me/bb089e24f2a4e7affd1c4d42f0800a987ff8a3bab8719490613642d3753c6565.webp",
+"https://share.yabu.me/524b59005b207b82767f6aab630f57355c17bb2b866b01bfdf64588ec30af86c.webp",
+"https://share.yabu.me/601db5f507fccbdf6a4733fe83ed7bc04bd17b7e7255a51e48cd035d3a7b10c2.webp",
+"https://share.yabu.me/901503ab450e1d6e542cdf0ab91b008091a91195e1565507135779c20a96ce77.webp",
+"https://share.yabu.me/e643850573ba6cd39e842aa02f67ddef71a5cf7829916ac02d9d606f167eae8e.webp",
+"https://share.yabu.me/e9d133ad3ca80481e50ccc2ff0c5e0180da7716df263c6f5635a28f021237a9a.webp",
+"https://share.yabu.me/0d1a267c52890e75e24f2cecb12bdf75a32855187fc5442146b13077883a801c.webp",
+"https://share.yabu.me/019ecea1703ed9a64f5c1c471b3df198a610936277612a7c0c4b259186002f7f.webp",
+"https://share.yabu.me/7ca24358df1bdba64528bd7bb2e6c136256bd097b3db1d7f7c132122c0663139.webp",
+"https://share.yabu.me/5dc1f444e322a9ac6939306edb5a5110128c5dffe85ebfa496c950f84b615412.webp",
+"https://share.yabu.me/cfe4a19642752d9cae8d370b40bdc177d5d889d6b56599c27f626ebd8c52c88c.webp",
+"https://share.yabu.me/bd309c02d7175d0714381a82e620af95641917c0c8b1442ac7dcee53bb3b50fb.webp",
+"https://share.yabu.me/9dc1bfdb3d0c3c59b027d772e5b1e7e3b1a9fa56ab22614f987cf1b4c31cdc8e.webp",
+"https://share.yabu.me/d818049b20e7378a78966e7e2672fcb57654055ae04f83c48f3231265758f73e.webp",
+"https://share.yabu.me/e30fc32c30b69a24224deddb0954973ef1113fb2ac224bf7317bb9c7fe50ef76.webp",
+"https://share.yabu.me/fd9ded65a841c54b90278097077e61773049fc6316b40195ab0f2ea328cb7ad5.webp",
+"https://share.yabu.me/00ed379ae0159b83a3b4db1192439be0a528f2958c974da43566c634fcd2110c.webp",
+"https://share.yabu.me/54265989d042b63cdc9773f3428c4099747c8bfc6057d397bf35cc939715b79b.webp",
+"https://share.yabu.me/9a2f535ee4d2c24adb43fc1ba4ad8bfc7ab2ef0526908d69d0dd859ddb983865.webp",
+"https://share.yabu.me/737dc99147de7d5c5afc00de19d4e32431d098139562a96fc3bfbd767e400cb3.webp",
+"https://share.yabu.me/0093fc046030527c59686d7490febfd14eaddcaab5e0f006258304bcc8f1bc92.webp",
+"https://share.yabu.me/65ae8548babec11e034ca056ff8a3623f0b7c92ba20e0ceca43ad49b17590597.webp",
+"https://share.yabu.me/14af92abfbf5766693d728179954f96afacb8488ad5091e1175da698534eb70e.webp",
+"https://share.yabu.me/56f83191d6ea8be55396ef27e19af2843178306b1864066d0c21ed57c809defc.webp",
+"https://share.yabu.me/67a117fc97a94442fdf159f524b47dda1ce4b86b3d3fc34d00e47d6d88964999.webp",
+"https://share.yabu.me/488bd5fca6a9aed7a6e5d52b15552ada5fca94e158ee690c142ab4e91609fc7c.webp",
+"https://share.yabu.me/f9a48d6456c5a3e408df53e509707b52cd42296079b989e2a22a37fc59adbb70.webp",
+"https://share.yabu.me/d3ea4ace9076556f8095616ec0ac49f20eea2717be0d68e42f779779cac1cbb5.webp",
+"https://share.yabu.me/fb53bad15c761207f2e50091154fc2861610e2c8c950d98a22b15f72ab191d63.webp",
+"https://share.yabu.me/ac4b8ddd6618990da095ea95dbd4848efc8b2ecae2fce37644685d4f69dc2ea8.webp",
+"https://share.yabu.me/95b260cef7b717df35984541990616ba9888ba749798ecf97e7aa5a22f7bad76.webp",
+"https://share.yabu.me/bc58d43ec8c24ccde1c878fd6003f03f40f606eab800ed9f54ff5cb0f5a3145e.webp",
+"https://share.yabu.me/80152c14f281b5651f1ff58f6650ffa8928aae8ed62ad0d25c56b9f2abe3693b.webp",
+"https://share.yabu.me/399aabea4637806c4573c4a7f1212839741cbf5a77fa31df4efb78f7510ab696.webp",
+"https://share.yabu.me/e0ab2dd78734554981ad436ee54e7ed49662bd6e67b95294ab46c5bf70af505e.webp",
+"https://share.yabu.me/e27dcfe49e815c5cac24253a85378582598e0c735e69dd61363592a98c02f127.webp",
+"https://share.yabu.me/50dd1b4c4c488109a0c8e9de14d8568de48bcd7a9dfa27de2386bbcf2eafa231.webp",
+"https://share.yabu.me/fc365d8b230e446fe1f70c20fb820b4297aa86e40ba56874e18b400a7d1fc99c.webp",
+"https://share.yabu.me/d264f484f782c704ed7cd983aaa9acab9970d0423fe8745a4be53086fcb007d4.webp",
+"https://share.yabu.me/b50ae65d858e82f820492e4136445d92d94d7a9c09e66742078e19457bbd1da7.webp",
+"https://share.yabu.me/54265989d042b63cdc9773f3428c4099747c8bfc6057d397bf35cc939715b79b.webp",
+"https://share.yabu.me/06f2d5ec00b54894d730d2478959fbbd896fea6431c6be4406fb694d94b8b6fe.webp",
+"https://share.yabu.me/88f9f80685a8b1bb11fe6fd57df8a01785b556f2f8580c03b76d343300b6073b.webp",
+"https://share.yabu.me/fc2e1f369051dd010924489a0d0ceb9a46e84602ce2715e20809484a37b8e209.webp",
+"https://share.yabu.me/c1a28fe131c3ac1a9ec93e487f2b0bf920c79b8f857f8d2f975043011cf9b9f2.webp",
+"https://share.yabu.me/2ce57651e7ed64190d9c88f02bf709b500281b898a6c211e5acf73b80649dee7.webp",
+"https://share.yabu.me/31fd7ffab28e328eb6775affcfc32e3f84105cb5e0ca78a735b1d56121b85ede.webp",
+"https://share.yabu.me/f357f6676adec84cf8e7a2e0dbd6925dec6b79bce3ab52b8b8ddc116e32cfd73.webp",
+"https://share.yabu.me/379dbb079401e493fc5ef8c4ac0d91efe2ed018fe4b9cd667c89ae6c4cc0889e.webp",
+"https://share.yabu.me/bca890ed916f7565738c6ffb708b5cc070940b500d8e91c217b4e7b2cf7b2204.webp",
+"https://share.yabu.me/cbba8530937923ff5e51b05f04b45dc62c8cabd3b85c2490ce43f3ab8edce961.webp",
+"https://share.yabu.me/f2c3310c4b709bc4d870febc4dec4f7208c81eb777165358d522a3e7129415a9.webp",
+"https://share.yabu.me/4920ce49051772f65d670df43aacbc9e3067c9628cd510963a891c1770eff8b2.webp",
+"https://share.yabu.me/e83916879cf135f6cd8cf1eefcaa068100ce2fd4d0ea01a7096020f5f71505cf.webp",
+"https://share.yabu.me/06d1194b7eaecab3a0c47aa5ef9ce8b38d1288b4a9f09ebc5e752e394b18112f.webp",
+"https://share.yabu.me/2833ef690bd1f1f793d8ba3982e0928f722805733215baf6b83efef122e9de77.webp",
+"https://share.yabu.me/5ceb0b9c45dc6846b5cd3810b68c2f24878335b43b883ce2c42e3e124664bd3f.webp",
+"https://share.yabu.me/f546372b7bc80f9950c34329010a934a908513943ce325bf53318be733c56f27.webp",
+"https://share.yabu.me/ef888858dbe3d1ec1a66b48083f1f360abbe0b67a1fa8c7783681087192069cb.webp",
+"https://share.yabu.me/12fbd5ae49172e1bcad48b51faa10017b0f5f74ecfe452431e3fd9a2755e9735.webp",
+"https://share.yabu.me/f1ee69a9fd0c31644e2d9ed8d4a4bfb894f1afefd2ba1287cdcca51d6d37da98.webp",
+"https://share.yabu.me/441b5c74eae7d1addd553d4b1da280102f6295111a504610812df00065e44a67.webp",
+"https://share.yabu.me/bd4bac49549c768f0bb5163bf6f566b2fdfa3435f9a8914ae876c5f8cc6ca2a2.webp",
+"https://share.yabu.me/72e3c9bcfb415a0fb7e325b866a0e413fde006bf093a0e823e3179b806573e07.webp",
+"https://share.yabu.me/f7827eee20b4e574e40e88bdf8887ce87cc4e5a117eb2e3a7549bbb0c2799e84.webp",
+"https://share.yabu.me/30fff84df98fcfc942a86187a4e781441612f1d1bfa7a5a70dde3104279a68a5.webp",
+"https://share.yabu.me/e2921320dc526841ed32f30fd1091eb5ca5399ccc09efc13d5aa3e7a318d6ac5.webp",
+"https://share.yabu.me/884bf9dd18bcb93d4eeeeda69ffba990b79d77e904e71825e4dcab4a2b6ffb3e.webp",
+"https://share.yabu.me/b3a10dd9519d06c8ce212d92dd92168b2b20cdaacdb1fd1073b5df7e9dd17530.webp",
+"https://share.yabu.me/6721cc3558e420a34a570ac3d3e8b1d25b131a10e25f8d60dd377aec2d10f506.webp",
+"https://share.yabu.me/cc6b020db1a061600869ef27f60d5b762cfa13f31026bff53a71341015ca9e70.webp",
+"https://share.yabu.me/1b1d38bcaa62b847698a2869b8fcaaf78c5011836a0060924bd398e3c55c7940.webp",
+"https://share.yabu.me/2d885fc86747c14ef3fd4edf2e8c2bab6a5b1e61bf6883eea178a9d688855455.webp",
+"https://share.yabu.me/d5228c7d8d19cc3f97d01bfe2ab896993a0a7b03e5f503398bb3819d20b91dd8.webp",
+"https://share.yabu.me/0688f19f1a885a590738ab88b847acf60d70300387a976fb0e8a2cab832a1646.webp",
+"https://share.yabu.me/faf76572c069650440450f084aa307eedf29d2bc8d84d07672497aea67f9baca.webp",
+"https://share.yabu.me/2729c30a419ba9bee88b59fec3d7d8c19df049299bc0edd32747d4e60390fe4c.webp",
+"https://share.yabu.me/b4c59aea57087afa88ae2539faab23dbac2b356399e8569128b6e9d2bf08e0f2.webp",
+"https://share.yabu.me/1e53f26b3fc0b13bd2c67fe4debe69dd5e22350d74d260915e07ec3dada2ceaa.webp",
+"https://share.yabu.me/09463348b8980bece94e672930184e0b5cd24f9660222f4b629d965301144da0.webp",
+"https://share.yabu.me/d0bf32fbd9810806fd7d0e9ee8cfe8aaf98034a71324c42c5109c3a642e3cbf6.webp",
+"https://share.yabu.me/3557fbd9a48e2d8e58549d699604a1be6983cda35351ecc23e6289aa4122cac1.webp",
+"https://share.yabu.me/be50478b405cf9da763bcf94f07aaa74ff4f8361c1944ab6da34c1c15f369790.webp",
+"https://share.yabu.me/4480110a9bb0893e2bbc868aee6850cb1eeab2f98b666528aca5cc3b3dfab2ee.webp",
+"https://share.yabu.me/c41166f014b332b58d21709a5608f339755eed8ca819eaab38cea5e2718fefb8.webp",
+"https://share.yabu.me/f83e4543a4b9a2082309cd4a2bc3e45c893ad0113ee3644b030d3e0083347149.webp",
+"https://share.yabu.me/869450cc19ea72f86b243c05554ea2b37f0cdbfb8c46343e8da2f4abdd11b15c.webp",
+"https://share.yabu.me/03d154d513450e350f762bd0434b300cc56fc2dba5212715e3e0e76c7acfcf7f.webp",
+"https://share.yabu.me/512072203822e891f395b61193242c5f4b927ab4457cd7d8ed95c3e472c8709d.webp",
+"https://share.yabu.me/14d56315c0cbe1e8714ba6efdf85d29ceafd6f179a0b75c788a8cb362359bd06.webp",
+"https://share.yabu.me/cb51e5d194ec93b131b758137f704411740fe9d1daf5a5d36de4efe8e544f403.webp",
+"https://share.yabu.me/12d42706423cf96cf469e857ba7b0ce25e6140320285d562a806d2595fc5f348.webp",
+"https://share.yabu.me/296a6ccfbd8d3d6013ee395202d2ab828a32c09153d1879406669877a346b735.webp",
+"https://share.yabu.me/4f2bf99d4a903ee87a9a0b92367164cb018bf857bf8fcedee76068c741f5d994.webp",
+"https://share.yabu.me/292ff20053f0e4c815e57b03dd183e757bcdd2aa421d977b3b887f65dc922fec.webp",
+"https://share.yabu.me/84c733a63de0362d72c3665ab96fd277b7800889027608b5a85a22bbab97685c.webp",
+"https://stat.ameba.jp/user_images/20211223/14/diosmio7289/fb/96/j/o1080072515050361583.jpg",
+"https://share.yabu.me/29fd3fd6fcb1c5c72eb75c36b5232efe93e9ca4d232befc92a5e59f8658e03c9.webp",
+"https://share.yabu.me/16ba11850c7f0e6aa3422e24568a8218ec2d14cb82ef3b8ef3e1164ad9cb3113.webp",
+"https://share.yabu.me/cd580e80bca9863e038057fcd01b9864dbbda053ae3249743f5b4abbeaeddb72.webp",
+"https://share.yabu.me/f48ca4ed12f936182f91eca6ac36b5776e348f7f70fede5bf6d61d6d4bd9a622.webp",
+"https://share.yabu.me/ceb5d6a27a10afd1c1bbd63dd2c331480f79d4ccc3a882afbc869ec195e6af8b.webp",
+"https://share.yabu.me/594ae3de416889e3dc341db6de91ac746d1b6552e1e40ec29d4cf20b11622457.webp",
+"https://share.yabu.me/d815913ac584fd7007b40ed6543f21e11ad927e0e3d91d416d579206277168a0.webp",
+"https://share.yabu.me/78568208abf0545c18c6ac2f9029481f57b359c7d6e9b1f7cbdf4035310211a1.webp",
+"https://share.yabu.me/d70a8b0da3f4c038be266a6cc6e310e3cbcd768ea9cc5b16f06121c3f6023a47.webp",
+"https://share.yabu.me/05c8e6ef8fb99119b43b55d10dae99984ac148bb996e2619d2dee1e7eb7772e4.webp",
+"https://share.yabu.me/556b646ce2daf1f6e7c23c0cbb5feb9bb4dff23724f84c7aaa79d83adce6a5af.webp",
+"https://share.yabu.me/92929626e7887f6f42c65b625e7a48ddee1a723d2e114d678e74acff594a418a.webp",
+"https://share.yabu.me/dd124a775e463c33c63a15a396e474917ee6c8ff579feb0c6772584f010cc793.webp",
+"https://share.yabu.me/65db3228aedd3b66a4148d44f468f4697400401af769b104993223dcc4714aa4.webp",
+"https://share.yabu.me/45f5a3c4516aa1142b25e12def458b70fc09ae6038285db7a712b22c3c09d24a.webp",
+"https://share.yabu.me/d99ffb01abb06a11839c5ffc6f7eef0a70f1a65a467f971798df5b26debec969.webp",
+"https://share.yabu.me/69d02ff8e64b863e06a790c78049d92c1cc016eff596ab165c61955f57427faf.webp",
+"https://share.yabu.me/485d4d85284181c2be28247563404617b2153e1320d33dad9c94aa3d945da04b.webp",
+"https://share.yabu.me/8368b21350f81ed9da23fdf09ec3fab64dfa6c69a8110fc8006628ecb9ffb5f1.webp",
+"https://share.yabu.me/55b6175ed059bd1dad860289c6c146c9c7391dbc63b060f6df209821d9cd7d39.webp",
+"https://share.yabu.me/6cb602ba2ebb1960073a76f6b0ab87c328b927bb847b12e699770d5213ef0f36.webp",
+"https://share.yabu.me/c53700a779aa1a5d0bf0e8128e02b0df5a5b0a19ef985c07521a4e6079b88491.webp",
+"https://share.yabu.me/2e180917364985d73d83c7cae6561cffc3f52209a6724978f5c5ab16082063d0.webp",
+"https://share.yabu.me/e959da01cca33f875141354d553442c176ee07472b8e3d7d3fa64ade9723baa8.webp",
+"https://share.yabu.me/5350ac4e0f7f3bb1f3762941e0098e6c5626aa3598c63a3b3e1c2fd5ed5e11f5.webp",
+"https://share.yabu.me/8fe32955e6d26373d49b77a42a184f95e37861f445e777ecf47be7802fe671ac.webp",
+"https://share.yabu.me/4641ef82a1a60bbeb77e53a2097e120f8377f0e2172fa083c7414c05d9648077.webp",
+"https://share.yabu.me/c6265753e60e24ff642c95db05d7b6066b45cf15cbe368f7c7a44a2c90423d89.webp",
+"https://share.yabu.me/736026e6e1ea157615940fcacfe259e261012427846b65ac2c6b12a3f95e3e9c.webp",
+"https://share.yabu.me/f03d41fc354317014595667815eec7de8c5a10802be1a2c793c34e0eac6be4fd.webp",
+"https://share.yabu.me/10c2ff377df47c3e7c6844a90d5f2296f975bb432893b16cc1f14819f241a6c3.webp",
+"https://share.yabu.me/1eb019433d11f7196d26e568c12ff93dd0ae2c4bf77cbb761970a0674876bd6e.webp",
+"https://share.yabu.me/843ac35661e81edbd1550659e1f37ed5c242a10caefce8259701c4107ef46189.webp",
+"https://share.yabu.me/c504d1306e56bb24227755e9f16ffcc1ceb9a8f3dba1c8ccfd1606b6e6148b77.webp",
+"https://share.yabu.me/f2126e9c38f0ceb72b0d7cae38a0097ee3d309fb095c9ee9c3cd41b554756306.webp",
+"https://share.yabu.me/47e4aae8c1d7d3b52d47870d16c11beb1a2a0b2f28f69c3af516451ecf9120d5.webp",
+"https://share.yabu.me/9dc1bfdb3d0c3c59b027d772e5b1e7e3b1a9fa56ab22614f987cf1b4c31cdc8e.webp",
+"https://share.yabu.me/7fd01a6d6205f277fd6447d866f83de1a5c5cb704c79f0167e6654cbfbad2f0b.webp",
+"https://share.yabu.me/937ee94caf3aa19125d36c6360b2f1f482c143e1fd8f7e9704f3d18820342154.webp",
+"https://share.yabu.me/26133061167ac277b0859d5ee724772f28bd7735239cea7855a6fccfd33e73f4.webp",
+"https://share.yabu.me/d4ca851869feac0581aded673a582935254189236c35776341cee5b32dca50b6.webp",
+"https://share.yabu.me/f64185cb9e4870cfff9767ff2a0f8a30df4ab88097049e100b086ca39d14f093.webp",
+"https://share.yabu.me/cf5c31d0b19837680a7fd5a1c19deb7fd6145f9971e101164092a8725e324209.webp",
+"https://share.yabu.me/60a170106f556adba59668b35bfaa1271da0f6c7459f97b4eb2e84762c6b0666.webp",
+"https://share.yabu.me/10d8c4dd84a1a6b330fde2058b28e6396261bf5c378bde865c70b8d0a031f352.webp",
+"https://share.yabu.me/4b645bff037b27f18e2a3517cac2d2d0074dfba2eb44e88158fb3ddfe10d854f.webp",
+"https://share.yabu.me/b92fa3a039dbd810602986710bc4e6c03eb3365308250e607f0d27ef99c47824.webp",
+"https://share.yabu.me/06275748e3a89d63a99e1919ed610a33610d3bf4084e2c1998cba9678bf43a0f.webp",
+"https://share.yabu.me/602b33e04584979ac8e066352015a131d80d88d65dee030b476c42716ce77a5e.webp",
+"https://share.yabu.me/83719d6b7300d0f8fe9d0079e5a8c2b3551e2d9fb58998d76b6aa2a80f824eda.webp",
+"https://share.yabu.me/8319bbd7cd22a2d06003cc5707672e2643187039b4d4a35c9e0fa3227bcb85d2.webp",
+"https://share.yabu.me/f2ac25705cbc7f8509d790fc513702d74f143d8a11d92875970d115e53a46736.webp",
+"https://share.yabu.me/0a5e9011f2c9292e4e1a6f5aa08b7b1f111b8e448a2669798beb6ae4864761fe.webp",
+"https://share.yabu.me/ca80a6acc6b4bcb64d3acde6be249ed5ef3a7f85fca421bf6fee3e367673f565.webp",
+"https://share.yabu.me/673526abc98f4564fcaffde2c47f055ee90223671a61bbf5e2fce6f9388dcfd2.webp",
+"https://share.yabu.me/c70561028bda513d5ce368fee99ae8681a8c5de60856aa612fa065c00e084501.webp",
+"https://share.yabu.me/92f34cc01dcf3957aec597cf2e6bfcaa2ab8acfa229cc1765d3446ed5c8f3132.webp",
+"https://share.yabu.me/861f0530b8198af5a3ac79b55c950703b115fc5fba6d3ec44679095b3117220f.webp",
+"https://share.yabu.me/2f3d59766262e970e1ed5e12b1478e53f7eef925571b854bae22c32427580ac5.webp",
+"https://share.yabu.me/c09eb8618759b104cbd76cb15e38af27a53472c95ede46dd7bf888320184720f.webp",
+"https://share.yabu.me/5fdcd9a213613018ddfd0c911cb12cec99cc76fe3b39036b43fccfb2addb8c28.webp",
+"https://share.yabu.me/717b5aea7ec8ab1f6e0ea31e4d194fe748170ca1ed80b9c86139decb7ed8b39d.webp",
+"https://share.yabu.me/be535dbe6fe945682a8e61d09f616874f85208ae94ecbbec60f9cef2067ed4f0.webp",
+"https://share.yabu.me/f171514e92067c32360e78124f9edfdfea6dccec23775ab9f48eebe6a38fc63e.webp",
+"https://share.yabu.me/ec4b0435d9020fb8f9ac56c0fdf5ebe0d6229a2419a90c830c367421bfacf9c0.webp",
+"https://share.yabu.me/537d982274ca0dc85e116add0fb9aef766f8bfc04f98deabafc27a49bead28b7.webp",
+"https://share.yabu.me/d319824a4b02074295c39a3c06f90592effc4cb48629b9aa99c14e797c3ea14f.webp",
+"https://share.yabu.me/dec75e0d38d73d7cbd0efc15391e8ce61d201f31f589f8f8d52037d0f0d564ad.webp",
+"https://share.yabu.me/936209e53134db0ddc93d586f87c3c1910ad40926f3494ca57b0c2c7bdc7abcb.webp",
+"https://share.yabu.me/dca4ad3b59232d87bb77470a9560adb482691d694240dc47f1624e178c6b7bf0.webp",
+"https://share.yabu.me/c522371f850ccfee740c4857f25c2920bebff455a1404ff0257bdc85f4ee3a38.webp",
+"https://share.yabu.me/da6bb8804f81315d4d652f6c5b770616ab6074b3baafb139599d7e1a44c2ef17.webp",
+"https://share.yabu.me/24a894742efaf7f6634256c89607c658a811b6cae0b68f3aeb7a11bdb470aea6.webp",
+"https://share.yabu.me/8590e11f2fcffebda92bed29b46a6c90d2b0dcd3cf5dfb2b94d261fbfc12a008.webp",
+"https://share.yabu.me/4cb79c2ea907e1cb2ae571fea7e5d3e78df3cf437126aedd5d7a0d9931165353.webp",
+"https://share.yabu.me/3a0c97daa14c0c5a6e41111c6966d64e48b45a35af045ec924985da78486dd80.webp",
+"https://share.yabu.me/36cee181e2e5d50cffc8f9e661f8dddf5a9a1d3a57e1e820f689c5237073f44b.webp",
+"https://share.yabu.me/3574530b3b8224fd3f64049baa03dca5783f10b405eb21419235b0b3734d6270.webp",
+"https://share.yabu.me/4cb79c2ea907e1cb2ae571fea7e5d3e78df3cf437126aedd5d7a0d9931165353.webp",
+"https://share.yabu.me/8c0ec8bb0dfb9d2669f17901f0706a502532b48755285be054d477ccadc231a5.webp",
+"https://share.yabu.me/0e7a8d5ec8a326d8097e148f59fd68cd41a3f1ec7239102f486c0ed73b0d1611.webp",
+"https://share.yabu.me/a547fe7150fb486c465a436350bde150f6a2f4720250d18da31bd9370a6c11e3.webp",
+"https://share.yabu.me/19a33545bd0606c058674fb33640f465f9ffad7508fac097b3035bb81e96e4bb.webp",
+"https://share.yabu.me/7e7b46d73852901f7e1d887c76923d8d55585feca1794bb5ea60d005e0f4bf78.webp",
+"https://share.yabu.me/3a0c97daa14c0c5a6e41111c6966d64e48b45a35af045ec924985da78486dd80.webp",
+"https://share.yabu.me/36cee181e2e5d50cffc8f9e661f8dddf5a9a1d3a57e1e820f689c5237073f44b.webp",
+"https://share.yabu.me/4cb79c2ea907e1cb2ae571fea7e5d3e78df3cf437126aedd5d7a0d9931165353.webp",
+"https://share.yabu.me/3a0c97daa14c0c5a6e41111c6966d64e48b45a35af045ec924985da78486dd80.webp",
+"https://share.yabu.me/d1c451bdec612ea1705cdc3b5c320aa47623f23c41e317458de2906e1d268d9b.webp",
+"https://share.yabu.me/a595493ed9103f38f03252ac045a556901132801a6ac1813bed26cc9caeb0abb.webp",
+"https://share.yabu.me/f80f739e09986a6dad3364c024992e640e2689791bc839bfbdd6f638ffcdf7a1.webp",
+"https://share.yabu.me/d9caab49ac3a1a768c0053eef63d615a011d770ac0eb918ebcc22a74e02cbc6b.webp",
+"https://share.yabu.me/628668369460092a33168e0e9c9ca292ccf323a301bf0c792342062e5d321e23.webp",
+"https://share.yabu.me/f8360a83beb9be1fbd3caed3428a9e899cf7b4122fdebb8f56b89994f994d001.webp",
+"https://share.yabu.me/fdebace4ccd15a96a5aabd72e29a98f392f8c71106e01d6316ac3c4901a1765c.webp",
+"https://share.yabu.me/768a1567cf29f029029b1b1e0c82f65538120e65b3e19d166a198fb2e5d7e4e3.webp",
+"https://share.yabu.me/46915c23cf6d0f46f551bca0d72cafe7b466377c3807e5e714efa259501aeb74.webp",
+"https://share.yabu.me/287e754f1c8edbadb8a9f5c8f07c66d55bcc22b0d310b6528966a02828ff613d.webp",
+"https://share.yabu.me/9cac6bd737b2ea52750b78a3c5f39d6d42d92c41f1620f25560b683d02413e34.webp",
+"https://share.yabu.me/ff96edddec1593c2b5ee347fc0eb2b68d283a31901cf7b8e58f9de1038f252ac.webp",
+"https://share.yabu.me/c7d6222ec920f633470791d89b6b9f881be73cad3b312cd3e8e735ad88a23de0.webp",
+"https://share.yabu.me/8b64fb14b7d211f0edbcad18dd45966624b0c523695feda4b9ed16d4d72695f6.webp",
+"https://share.yabu.me/2bcde6080ede513d2831f98747326e24adf9ee275e2d5d1c20c8a709a4fa9092.webp",
+"https://share.yabu.me/cc20709fb9e54990aebc82d4d9d0986ecf0578d697be77b679d31f3b56d394f6.webp",
+"https://share.yabu.me/27a83ecf381b4225fca39f0f94800fffcb59573cf739f8a2944837a56577c17e.webp",
+"https://share.yabu.me/cfe3aecf4f2eb7372dafdad4df2a7fdb922d559c9e4a00963f153d1c27b05368.webp",
+"https://share.yabu.me/a04023062464f656b12b59392d4a87149d770e5bca26ce84a3adf6e9841bcc5b.webp",
+"https://share.yabu.me/f062fffc8cf9bf4efca84865ef712511e6c0093836d39155daafbeb038128879.webp",
+"https://share.yabu.me/f0351ae5dd1b54c0e653aa96388f79de5f56e20df090590c12663ec8ec01eab5.webp",
+"https://share.yabu.me/33728ec197d2abfb27c6132f9db9dc8fc352e0dde16d047ad57018248c9a5a14.mp4",
+"https://share.yabu.me/1bd8177c7e4407f8114d4b4ba4e11ec66d97bd3287fc891301aa4e23a607393f.mp4",
+"https://share.yabu.me/77dfadb33f511953766507bf53cb6c1433e91d9135f473d7f8a8cba150b18fad.webp",
+"https://share.yabu.me/5098ebeaf227cc385aee3d87fbe5a4444762b51972d96ae286310c41b7828ef4.webp",
+"https://share.yabu.me/60f252a3351a0234fac6b00bbcd6d03b34f2bed88a5f6c47d9ac129c7ffd7f98.webp",
+"https://share.yabu.me/82064655f53362cafb0727551315cd0550280efab14197cd426f7b8a51729f31.webp",
+"https://share.yabu.me/534c34cf1f8528d21e06155f3940e1fd402331c74d2250367468694ccfa3516f.webp",
+"https://share.yabu.me/fd3e5fd13f655e12434c0e1282821adbc2cda0d356d8fd8fff76296f973f2093.webp",
+"https://share.yabu.me/4b48c8abc4f3e4875a525586228015af0073f5a56bd9e4d5e5ce0f80ad22065d.webp",
+"https://share.yabu.me/7a920a144c53db856040b3e0bafa8e50ac5afb490361e002225b1e3c740d0303.webp",
+"https://share.yabu.me/d61585e1c62408a97ea4c8c48e2abab524230c3f35073a1c91ae11c41b3c00e9.webp",
+"https://share.yabu.me/35706d37a69c219293ad47fb1d2d432e66284dda8fa088e413a8dd68a6d14a2c.webp",
+"https://share.yabu.me/f7674912e6bc75f3b708d6ed007d9f5ff12ec161abc64a3713120341f9b79065.webp",
+"https://share.yabu.me/9a2feaaad5f2e804814898650afd512d80e330bc54aa428e5efa94e9eed96622.webp",
+"https://share.yabu.me/ac11ecd232176a2502e977248c8966401bad3d9cb8ab328d179dbe3822eddbb0.webp",
+"https://share.yabu.me/caf63c73a2c5f599e6e1ef3d4bcec2e62275050bc9adac90760b4cd7ea8f4fde.webp",
+"https://share.yabu.me/8147cec84f9fdd81cbdab3d1a03b91dd2e32dff59e4258eb22eaff148451ab71.webp",
+"https://share.yabu.me/13f003d8616c59f45700d8996eefc029892da2e8ab91da82c0f68f1c3d620c4a.webp",
+"https://share.yabu.me/304c66d32edaf4947e8475b68b3b2579f8cf37c99bd201a21555bb0ff8312bd7.webp",
+"https://share.yabu.me/4f9eb92dabd21959359080e7ce1ede56b09cda6f94a58f78cbdbce7cf7c34ef7.webp",
+"https://share.yabu.me/d8467067b6646627724b5083a8dec5a34133ce004292668cbebd748feb9cab97.webp",
+"https://share.yabu.me/fafabad847aec1ba6a2d1d239429b1e8f63789d1ecb8319b49b55c3eb56d08a2.webp",
+"https://share.yabu.me/8e9b13293901b498c21758e1f9834f3a648e0a7bbf8321968b10799cd45b26c9.webp",
+"https://share.yabu.me/2b351b94b7bd2eaff94ad85a3d8b6f20fdf45aa6e98c86b2193f22e5b17dfa1d.webp",
+"https://share.yabu.me/f526a59290a6b1e1aea130c0ac3faf5d44bd0da1b941959a84bc1a2c467740cf.webp",
+"https://share.yabu.me/55c78ff24d27e5b2097b6c5c26b9c79337bddc1b30f590e94d45391eda5deab6.webp",
+"https://share.yabu.me/c78c6b67c3f2e1ba1946583655ddfc2e25e16596ec83196d2baaaaba00f70b77.webp",
+"https://share.yabu.me/54009b22c5909a978dc291e8b8ae8c67798152886e79c2043fa56c911f9b2fb5.webp",
+"https://share.yabu.me/0ce8323269bece1a8a4311857c0087d161c19842994ef6f701947472c26f2415.webp",
+"https://share.yabu.me/fd49b201aed2a9077d6eb8bfa53c84fa3118da8fbed2d6331db575f11e7217fa.webp",
+"https://share.yabu.me/c9b4cad1418fae2f4c70944f2ecaef9bf4a6a131e76f415e7c50def80a7d9756.webp",
+"https://share.yabu.me/f847bb9f1f971c259c5bb4b6a1d6d779b1a0c6682f9e0c49dd9cd6852eb403b4.webp",
+"https://share.yabu.me/c6c51670f68344417193c728522c75cfc8dacef80b9b0564c91c3eb07cf930b4.webp",
+"https://share.yabu.me/b076d53e82087eb4a370fe2ee13fdeab184c8803a740185f7103cfea77010370.webp",
+"https://share.yabu.me/f0774ae55128d83e07832c72c8f68f197c479878a7c7a6d93549e5f90944cd53.webp",
+"https://share.yabu.me/54f913fbdfe9c671bc0feefb86bdf664ef4168a9ef900e869031d9a7a001dc3f.webp",
+"https://share.yabu.me/84b5a21e82b82b019e5b01fb38d13091a5331dd0d16d2dcc58932a89fbfd9803.webp",
+"https://share.yabu.me/56de9dcd05a9d0ab86a70879faf6ddd5f2af97636ea506340654341cf98c38ad.webp",
+"https://share.yabu.me/654cb954638faed86e612b2c983b49ff12e653d598ef06be7f42f65d019f8317.webp",
+"https://share.yabu.me/a71c89bb181f78ecff80e7c3b6e10326628580a399ac03b7956ca7078912a0be.webp",
+"https://share.yabu.me/b17a4e589d00591e62f39912fc1ebf15ffed2bbc54d8db56b5ceba596466e347.webp",
+"https://share.yabu.me/9591063aa6bc9c7eccb4800028982a23945350ba3d683516f9f87a6db0ea3aa5.webp",
+"https://share.yabu.me/f93f71114cd66b4360c0ce28070c8af7e1ce93701eafab56faccb6cd13ce231b.webp",
+"https://share.yabu.me/e5d4590659e224df52a0ad233c6079422aa66a39d562d0557dfa9e2e7490a93f.webp",
+"https://share.yabu.me/415362b6f657e6810c246059e63962790aaba2bbde214009d9e3379da6385a78.webp",
+"https://share.yabu.me/00abb82a436d0aa5ed4da44f29d7104fe5b06261068609e49d3cf9e1edf9e784.webp",
+"https://share.yabu.me/82055a95a363d04a60730d845b7f0e3a4662617752d2d136328beb248abc41d2.webp",
+"https://share.yabu.me/6064e96b28397668ae015c2dfd7d938b4d25edb9e0ac5065dcc3febe6e28abe7.webp",
+"https://share.yabu.me/d09eda1522f8e29c1883d0314014a359a97998da22589b01e34fd35354dccd4e.webp",
+"https://share.yabu.me/0ea10ee187d3bc16ffc051d11dbd48af797e6525585761dc70156408a0e74152.webp",
+"https://share.yabu.me/d787bcc1f0f0ae3c4730404eb16e572dcc2e3819dc7a9f31ae2c41d7b903c9f6.webp",
+"https://share.yabu.me/f0e1456cf97e2069bc1d24450b3951a42a8eedc8ddf754f00a2fb93728cd83d0.webp",
+"https://share.yabu.me/c77a288f92d8dd66d697c000c7717ebb44619d3477b7afb33e24dbb77a3fcebe.webp",
+"https://share.yabu.me/ab7db0b8e51862d4f4163557318606503c233f3fbad9b12b7b89159666a56a58.webp",
+"https://share.yabu.me/ddef07246274580051adda5eb6491c233f250c3ce9fc5cb58cff8c6c9d565643.mp4",
+"https://share.yabu.me/60367dc8e7ec012d4fb6ef2f868fc55195d57ee875c751a9a93ee2b542527d4b.mp3",
+"https://share.yabu.me/a8abe05a929489395a9d7302ef47decec387a7a2f014936c42a35e50ed2d78f4.webp",
+"https://share.yabu.me/9cba9e5812c8ceb46dfeda4b1ae6192d1da97da1567f7fe92914c5f99551d9e7.webp",
+"https://share.yabu.me/da2e0d432f40f368583341b04eabf6529f2481d73cb8ed40f1fd6262a30fe0e3.webp",
+"https://share.yabu.me/98e7073fed9aa1bee1c4b867588a3eeaaab02dac5840396d3caaf9e4a789f718.webp",
+"https://share.yabu.me/fbb0aed0d4590bc339355df7c771d798c762e291394b03697030d40355b7ed6b.webp",
+"https://share.yabu.me/a454b49a014db517f7c01984e0c569de4c46d7948a0493c44516a2c15a8cfdeb.webp",
+"https://share.yabu.me/5265af684b3f64b4faaf4d275a2b967bb36375a13a9921d5af5e114ac0790f2d.webp",
+"https://share.yabu.me/07d8bfd3f5ae3e984188df3e026f7156ea69544a88e23afa2d638ff49b9e7df4.webp",
+"https://share.yabu.me/33207d261d1dd37f92548fcc392b211bfad187f2b8a1ec359defb7af6b465660.webp",
+"https://share.yabu.me/2a0e0326d25f730f6409b2c7106441004ee942a7f43ec7940f2774596b800bd9.webp",
+"https://share.yabu.me/fe718df9896d8533564f8ae9b1947ecffffc0fad5655d58c2466ae739708ba7b.webp",
+"https://share.yabu.me/fdc863a0f5c4375623811c786ef58772ebd29fed86990e68087e2f6b4003d73b.webp",
+"https://share.yabu.me/0d90a96d4132f8a47e21ca417ff399b87bb259f100eb43b07324dc7c89d63e54.webp",
+"https://share.yabu.me/c02f39110b9881fa74c4a05de3baf22aaba22e745d659caeeb1d561ac6800b8e.webp",
+"https://share.yabu.me/8c31ee95424affbbe2735d052259b57bf9ebc81c7a1a14403e4a9fec0560bbc9.webp",
+"https://share.yabu.me/ab59e6a5f8a298e6c87cb347e4cfe2cdf0d12ce8d8cdf05b785697ce5d4fb805.webp",
+"https://share.yabu.me/165cf7170b20b25ce91b0b14819cbeae916c11352778ef9e1404eadf911c9d74.webp",
+"https://share.yabu.me/667d583706e73d8710a61ad98c88d066fcb92b0964eac37c33c9c1b57ff4984c.webp",
+"https://share.yabu.me/ecb6b98e2681e5ebdf86657d1a697c1119d70a4555574fd4a692e54fbf281f44.webp",
+"https://share.yabu.me/d8ee67f6232cf02c8fdf7c2ca3dea831ec41ea2f462e256efc79be02e29d3d7b.webp",
+"https://share.yabu.me/3a42abda237da5a408919dcd117d34b2540ac71996aee491de6352acb93a1b2f.webp",
+"https://share.yabu.me/faea70b58b6c9006a5a69a2ede3846fb8ce1ba12a11db76b9af053955261ac8f.webp",
+"https://share.yabu.me/0ed6daa6fcd68e8c8ef43a99f664b0a2d3d657f8d1ba48e43cd2a247e2fda481.webp",
+"https://share.yabu.me/21c5b279480f06a42f115f6dd58bd98e1e103065391e2592e7795f965aa9c320.webp",
+"https://share.yabu.me/0a179231d5704b531a1474fe1e12ac284b10b4f0bbeff35880d8c8d1b76b914d.webp",
+"https://share.yabu.me/95023f2527c4d7a6143affa2a5a69c4ed865197f997946ef853fe6a8fbf17f90.webp",
+"https://share.yabu.me/0fa1d6c2c29063a0e7f81dabb08aa558b5bedb58495cafd522c483a88c0af4d3.webp",
+"https://share.yabu.me/446498c0a2ed14b9e250267f2e1a53345d84451f92c6dedc00c270a6aa29f219.webp",
+"https://share.yabu.me/0e2292726d485b0eca28e2df1381402f4664cc209afecb0f72c4451c077f84c0.webp",
+"https://share.yabu.me/19be559fe3d0869f822e8d7cf4a3a89543172f4922542d4d90424edbd12cd5aa.webp",
+"https://share.yabu.me/c138f175394298f7cfd41fcdd154902c21f2b0176cebfb876cd935364de7bd27.webp",
+"https://share.yabu.me/ac36043e37c2cfc0b04a05eb84a336d139e3a18176bccd7de5e219ececd9d631.webp",
+"https://share.yabu.me/ddd4d6723e948eb195634010fb19f3ac7ca5a65c1399301bac35c9bd19ac60cb.webp",
+"https://share.yabu.me/0b78f7f9729761f438906fc805206e90e915f6d487f0f1dc7bcaf4cc4bf36170.webp",
+"https://share.yabu.me/ff9aec009ff6e7d1391fe635532db7b561dd64a49e2019e7b203f625a6cd0f97.webp",
+"https://share.yabu.me/ac41f5c73fea034767ce16cb10ddd8495caed37fa646fe5408a273c22f4a42c1.webp",
+"https://share.yabu.me/a44fc6d2c00cc87162181a9a6819f042996900001f7770d9b4b32e981ebb5e17.webp",
+"https://share.yabu.me/8ea1b3a69540666ee8c75960c6f520255115534e48299562c805c25d776a74d4.webp",
+"https://share.yabu.me/f74f8f419939d1ad36f7ab5a32fc7412d139a04095b57e10d62c038067c273ec.webp",
+"https://share.yabu.me/d98b456367c64b5166844ae7294631a3fe0a8945b4aa08ca3f176630601ce668.webp",
+"https://share.yabu.me/afdbf81ffaf214a818079ea606814c5fe9e4c30baeb47ee184177a235df5f41b.webp",
+        ];
+
+        const container = document.getElementById('media-container');
+        const lightbox = document.getElementById('lightbox');
+        const lightboxBody = document.getElementById('lightbox-body');
+        const modalCopyBtn = document.getElementById('modal-copy-btn');
+
+        const isVideo = (url) => url.toLowerCase().endsWith('.mp4');
+        const isAudio = (url) => url.toLowerCase().endsWith('.mp3');
+
+        // 動画用の遅延読み込みObserver設定
+        const videoObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const video = entry.target;
+                    video.src = video.dataset.src;
+                    video.preload = "metadata";
+                    observer.unobserve(video);
+                }
+            });
+        }, {
+            rootMargin: "0px 0px 300px 0px"
+        });
+
+        const fragment = document.createDocumentFragment();
+
+        mediaUrls.forEach(url => {
+            const item = document.createElement('div');
+            item.classList.add('gallery-item');
+
+            const thumbWrapper = document.createElement('div');
+            thumbWrapper.classList.add('thumb-wrapper');
+            thumbWrapper.onclick = () => openLightbox(url);
+
+            if (isVideo(url)) {
+                // 動画の処理
+                const video = document.createElement('video');
+                video.dataset.src = url + "#t=0.1";
+                video.preload = "none";
+                video.muted = true;
+
+                thumbWrapper.appendChild(video);
+                thumbWrapper.classList.add('video-indicator');
+                videoObserver.observe(video);
+
+            } else if (isAudio(url)) {
+                // 音声の処理
+                const audioIcon = document.createElement('div');
+                audioIcon.style.color = "white";
+                audioIcon.style.height = "100%";
+                audioIcon.style.width = "100%";
+                audioIcon.style.display = "flex";
+                audioIcon.style.flexDirection = "column"; 
+                audioIcon.style.alignItems = "center";
+                audioIcon.style.justifyContent = "center";
+                audioIcon.style.padding = "10px";
+                audioIcon.style.boxSizing = "border-box";
+
+                const fileName = url.substring(url.lastIndexOf('/') + 1).split(/[?#]/)[0];
+
+                audioIcon.innerHTML = `
+                    <div style="font-size: 32px; margin-bottom: 8px;">🎵</div>
+                    <div style="font-size: 12px; width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">
+                        ${fileName}
+                    </div>
+                `;
+                
+                thumbWrapper.appendChild(audioIcon);
+
+            } else {
+                // 画像の処理
+                const img = document.createElement('img');
+                img.src = url;
+                img.loading = "lazy";
+                thumbWrapper.appendChild(img);
+            }
+
+            const info = document.createElement('div');
+            info.classList.add('item-info');
+            const btn = document.createElement('button');
+            btn.classList.add('copy-btn');
+            btn.textContent = "URLをコピー";
+            btn.onclick = (e) => { e.stopPropagation(); copyToClipboard(url); };
+
+            info.appendChild(btn);
+            item.appendChild(thumbWrapper);
+            item.appendChild(info);
+            fragment.appendChild(item);
+        });
+
+        container.appendChild(fragment);
+
+        function openLightbox(url) {
+            lightboxBody.innerHTML = ''; 
+
+            if (isVideo(url)) {
+                const video = document.createElement('video');
+                video.src = url;
+                video.controls = true;
+                video.autoplay = true;
+                video.classList.add('lightbox-content');
+                lightboxBody.appendChild(video);
+            } else if (isAudio(url)) {
+                const audio = document.createElement('audio');
+                audio.src = url;
+                audio.controls = true;
+                audio.autoplay = true;
+                lightboxBody.appendChild(audio);
+            } else {
+                const img = document.createElement('img');
+                img.src = url;
+                img.classList.add('lightbox-content');
+                lightboxBody.appendChild(img);
+            }
+
+            lightbox.classList.add('active');
+            modalCopyBtn.onclick = () => copyToClipboard(url);
+        }
+
+        function closeLightbox() {
+            lightboxBody.innerHTML = '';
+            lightbox.classList.remove('active');
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById('toast');
+                toast.style.opacity = "1";
+                setTimeout(() => toast.style.opacity = "0", 2000);
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === "Escape") closeLightbox();
+        });
+    </script>
+</body>
+</html>

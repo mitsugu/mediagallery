@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Gallery (Image & Video & Audio)</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --accent-color: #007bff;
+        }
+
+        body { font-family: sans-serif; background: var(--bg-color); padding: 20px; }
+        h1 { font-size:2.5rem; text-align:center; }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .gallery-item {
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .thumb-wrapper {
+            width: 100%;
+            height: 180px;
+            cursor: pointer;
+            background: #000;
+            position: relative;
+        }
+
+        .thumb-wrapper img, .thumb-wrapper video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-indicator::after {
+            content: "▶";
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.8);
+            font-size: 30px;
+            pointer-events: none;
+        }
+
+        .item-info { padding: 10px; display: flex; justify-content: center; }
+        .copy-btn {
+            background: var(--accent-color); color: white; border: none;
+            padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+        }
+
+        .lightbox {
+            display: none; position: fixed; z-index: 1000;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox-content {
+            width: 90vw;
+            height: 80vh;
+            object-fit: contain;
+            outline: none;
+        }
+        video.lightbox-content {
+            background-color: #000;
+        }
+        .close-btn { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; cursor: pointer; }
+
+			.toast {
+				position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+				background: #333; color: white; padding: 10px 20px; border-radius: 20px;
+				opacity: 0; transition: opacity 0.3s; pointer-events: none;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Media Gallery</h1>
+		<div class="gallery" id="media-container"></div>
+
+		<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+			<span class="close-btn">&times;</span>
+			<div id="lightbox-body" class="lightbox-content" onclick="event.stopPropagation()">
+			</div>
+			<div style="margin-top:20px;">
+				<button class="copy-btn" id="modal-copy-btn">URLをコピー</button>
+			</div>
+		</div>
+
+		<div id="toast" class="toast">URLをコピーしました！</div>
+
+		<script>
+			const mediaUrls = [
+            "https://image.nostr.build/24294afb98ba819caf4c14a7eb3928c89fd2ca70f2a865808c2f2b1af07e0f5d.png",
+            "https://image.nostr.build/5a24d9d301512a97311935f54c40481b06e46fd708c18b6b627cce5d8afed119.png",
+            "https://image.nostr.build/7313ca11d5abbfda22f847b0c0d10eef756304b107aa6f0b9fcd6d9790bcb71b.png",
+            "https://image.nostr.build/2f45e190f43fadac6752d5caf0f125d7bc4736b250e5c0d5881a68ae86e69414.jpg",
+            "https://image.nostr.build/ac0be2a43b218c37cbe8210b5502b40b0c69abbd91a7c6b799ca1f84efe0bd78.jpg",
+            "https://image.nostr.build/fe5e5e75d564ced6bf926d1f12f08e74a099d2ce370d16d7cdcc8fcbdea7889e.jpg",
+            "https://image.nostr.build/4841f6bdcd5d394c852ebcf60ada6d6e43f803c7b2da1639df7be2fd2ae0eddf.jpg",
+            "https://image.nostr.build/ceb8a67a743050dc4dfaf1369a1b5dd417e85674645b668e7e45a8b1fa4592f5.png",
+            "https://image.nostr.build/bf2b6311c00063feccac8f9c184332f4284e23278f175b13735cd08779cb93ff.png",
+            "https://image.nostr.build/d864db592110ebc832d0e94d026aa86a61907a23c0583d0f9e9cebe6807582cc.png",
+            "https://image.nostr.build/6684f2c326b78f43c87da024487211958d226ec4cef4f82dbe66ae14c882c32e.jpg",
+            "https://image.nostr.build/c95eff859f598a5e25fc9c21d255d6c2dee066e56c034a7c2030e03f0d4789b1.jpg",
+            "https://image.nostr.build/7ab02e033b6e1f9ff3c9b7457e2eca0f0486e5394e20eeafddcf8a00ce022d49.png",
+            "https://image.nostr.build/c82e6b5c05f67ebfbd505add354ad36e835cd76608bd60ab44d091f148f575ec.jpg",
+            "https://image.nostr.build/c99eae91edaf8baac10414655063fb483ea1da47e07535fd718839d8e5ed9c55.png",
+            "https://image.nostr.build/0968b8f9d020783ef87d13eef03a02d1b19d7e05654c16b403b880cfb9cdb283.jpg",
+            "https://image.nostr.build/4039859bca91f97b4c2bf51d7915968976c6b1d576d929cdadbcdcf39b8ed7c1.jpg",
+            "https://image.nostr.build/dff0982a088e04f9e1f1ed075c94fcdb8c8eeee58e4fd0f67fed7a35302642ea.jpg",
+            "https://image.nostr.build/a8952dd4dedc771fa298224af851c010c2e46791c9e519f107ca0b49ea06add5.jpg",
+            "https://image.nostr.build/b7f94a1ccff050456a381c260f33424f439686b75d5d873085d5c7606b92ec13.jpg",
+            "https://image.nostr.build/7a2299ec483dc033b9a50f1dba5079718ef220f2ae33b37cf4c54dc79c7b5047.png",
+            "https://image.nostr.build/d0a2e7f825e7b7906a3a95032f6337f3e5079a13fb35a268d71f9bf19acdb2b3.jpg",
+            "https://image.nostr.build/b412672e7d3b85763caf41935f8c5f9361919ba5c0ec046e5bd043d8700bb338.jpg",
+            "https://image.nostr.build/e5496318539a76f729f8e6c4b7a7576c660a6bebd49f719e68fe443434db0f61.png",
+            "https://image.nostr.build/ef695362a5d959e9bd49b9644787e4a573638fd1e74e73da2726572a47d628c5.png",
+            "https://image.nostr.build/d4fe9d1f2f56d935b30d1b352e50623bdb53bcef2b654517ebb5d71453ec7637.jpg",
+            "https://image.nostr.build/16d454c672a5c741f2207ebe3f5492b8c50fb74afb9be3ae028818b148c11bde.jpg",
+            "https://image.nostr.build/67c4b3fbfa76148792e11d75d33cc8eb73efb9cd18e02fd160b195bdd8495062.png",
+            "https://image.nostr.build/80163565a9f77c9b2d14ecd1ad17008dec5a84f5fb88332d18191ab05d58bc3f.jpg",
+            "https://image.nostr.build/a337121ca715651c003bd95c7bb4fcd29886238a1f55b27ccce1c4f08d46f3f4.jpg",
+            "https://image.nostr.build/ea99277dae26a610403c58e939a2934dae3702d6a910c7c7b0336f23a9f246de.jpg",
+            "https://image.nostr.build/815164025317d7f5cdf1b2645afe6d6c4964c5eb224832a4f54d35fe9d932a77.png",
+            "https://image.nostr.build/0da7fd8a071d212c99232f57385837bf91368622a8f2d2901af15e4c3c937162.png",
+            "https://image.nostr.build/9fceae50f8d2f187a8147eca8bff355ddf2c594c37e2c1929b6fa23123d9e973.png",
+            "https://image.nostr.build/dbba67e7daa3aa6bd450209886ad8821381da7154c741f1f9d03bfa40462975d.jpg",
+            "https://image.nostr.build/8e9b2abdd9950eb929deab353bae4400a0bcdaa0fd7a8c7f0de4d88651887a90.png",
+            "https://image.nostr.build/6be1e37df6ced7d82e3dc08c3e235118ec83f25dda866ce6ef278f84d158af8f.png",
+            "https://image.nostr.build/418e97abac61cfee93ca127116b759f703063072c3f9d7ceba7ef13b98a30b00.png",
+            "https://audio.nostr.build/f40ff8e855ff0e8e936543aad9d3ca9a59c21aa4fec0bd777391afbdc22272c3.mp3",
+            "https://image.nostr.build/0c52fb2be531ff7d811e0013ac5423b377bcbf4c2deeb28833440138b6552967.jpg",
+            "https://image.nostr.build/e0347447c97ca7dd4f26efea3f50697067601a56dcfb2c517422b9135a8f2b19.png",
+            "https://image.nostr.build/ce8f92ae2c3a2254285d4a2f1251ee06950d7e0176a37f20234a2faf98e055c5.png",
+            "https://image.nostr.build/ef7a112e3fdd79c9d6a1598448d73305b534facaa1f835f5ebf1820cdf7632ac.png",
+            "https://image.nostr.build/2b9c0a878536a95265ec25777a56cd0d29db63e2f3785c9e0ef6153a7672350d.jpg",
+            "https://image.nostr.build/2c89fc248db4c42582e9b0d0ddce4df3d2b509d44c19ed4ed9befab698767f01.png",
+            "https://image.nostr.build/d62a7c7d04c861e69b79a4b304023a53373c9580d2383b8d62d75c3eef7396f3.jpg",
+            "https://image.nostr.build/cb49dce4df9fb562c947e9d970c099e1758e72e9c9c2fb512f52537a808d8cba.jpg",
+            "https://image.nostr.build/5e2e73d4eba430e9c32ddd62fb428051e2ddfcbf478a2975e94242cac98bdf8f.png",
+            "https://image.nostr.build/7d864ccc81e09acb084d5fa18aa1852e7ebd1bd1dc6750eb08566eb4757490e9.jpg",
+            "https://image.nostr.build/ed29141856065a021a7c90bcb6bca1240191b2f814f1eb2b14ebabf6f22503ee.jpg",
+            "https://image.nostr.build/0ee89dd850e17ac6fce5a3a7ca5074d4237478a601296dbd18859a048df454c0.jpg",
+            "https://image.nostr.build/765a642b247f13abd8eab32f0b8961aeb6ba6c7aeae78b9f5890a7eea1043056.jpg",
+            "https://image.nostr.build/43e266d2d7b37e4234ec7af3dee4c37d730d43976fe6bc30107510c7db87cd4e.png",
+            "https://audio.nostr.build/2d8fafcf4ac6a00df71d71ed948c25c424a818e4d016c6efda1bcd28fb791c57.mp3",
+            "https://image.nostr.build/bd6fa8c999db75ba6fdbe337d3e4b219ff9e5c0d43dc7cdfcab3ab211448669b.png",
+            "https://image.nostr.build/44b87a940e4b52e8e21ea47c9f2df9a1e31b77cea7e0d118f18a806ac9ea547c.png",
+            "https://image.nostr.build/1470c7f64136b814ff15858bd64028222ada5da4b26f8263acd94def867028e0.png",
+            "https://image.nostr.build/7db09fe6618da1ed8c8b499f2e6d2ca0476012d4c7dbb6691b864bccaf945b05.png",
+            "https://image.nostr.build/e040989b5e08db545064a0d9f39df212fbd6eaac61c02defad1184d9c680c051.jpg",
+            "https://image.nostr.build/b2136458cc5c02b90ae32de18641511cf7c16b1c449aaf514496715c4cce7ba2.png",
+            "https://image.nostr.build/ca067c098797611b0760b46272f96e53c25fdaf731e2b224e1dc3c1c0c17bf65.png",
+            "https://image.nostr.build/4306b277e28edea0200116cd06bd24c6636259c3cbe4b8327e53d2f8c125b458.png",
+            "https://image.nostr.build/a12d0b88365c89d89127d7ede4120940655d8af331edf35f8752c44a86b34025.png",
+            "https://image.nostr.build/fe381ba63a94a76a2ea2d2ea70d438aa85e2d748fb5e69c62da15f30732a4bae.png",
+            "https://image.nostr.build/3c6c8d43dca5953ded59a9f79a7dbbeb9237c78064d93acce9314338af70c89c.png",
+            "https://image.nostr.build/93ad3ee3eab43f7624e98e65c1e795043437e4095f0ed4c5744be17c6c87e882.png",
+            "https://image.nostr.build/65d84a6f0bc852d1fddf258259608315ead2b6ba3f6bc20e769818cf37434499.png",
+            "https://image.nostr.build/1d1ff90f796dcec162d6a1927836beb13ad267ea4bca767bd0a1ce72b6542a1a.png",
+            "https://image.nostr.build/eea6e8e64a486a7fe8ad2c13964a4334fa745f72d01be1ad5e610b7271de2cf8.png",
+            "https://image.nostr.build/09721f7a90ae7806d8129c116f70e0c859efe851d660e861d734b7fb120ff45a.png",
+            "https://image.nostr.build/8d9b543d149d95fe5ebd3f2a704aed969a82435ffd359695451bf6b84435cc94.png",
+            "https://image.nostr.build/902ccc4e853368bb0486137abb2c9c91bca2e6f2668df7dbb0dce509efb66707.png",
+            "https://image.nostr.build/2b67b125e75fb77795fd35350a81acaa785456526042238da71f11b2623cccbc.jpg",
+            "https://image.nostr.build/f305e073eafa8132afe4d4f82107d0638a0884b9ab0a52508c01c29c5bcd61b3.png",
+            "https://image.nostr.build/f305e073eafa8132afe4d4f82107d0638a0884b9ab0a52508c01c29c5bcd61b3.png",
+            "https://image.nostr.build/049e541e35b3a430430c1654d885362db5081a69e9b6ebc5f0c5be72d31f3d9d.jpg",
+            "https://image.nostr.build/241d693feff6012b702122ae63b6c9aa344d0b4904c612d1d81f82884513ac06.png",
+            "https://image.nostr.build/7e12dc5bddbee7b1503ce4611a92b75e35c7fe02405945309c1d5bfc2d42fe7a.jpg",
+            "https://image.nostr.build/f8bd360b024721b932d31c576ff8b5e6838b00513dbf2daa00c22b0c2774893b.png",
+            "https://image.nostr.build/7d6db0833df1de087b3f6384496328957506d843aa1bd8c92b087d182c7c6d7b.png",
+            "https://image.nostr.build/cf5f7ff3ec5afddadedf16f0eda43f4c88b3397aedfeff86f06c9411d10b3a15.jpg",
+            "https://image.nostr.build/c3dd07e6d00a8fcfe49817fee791330766e533b0d78f38904d16b47cbb91529b.png",
+            "https://image.nostr.build/6a4be0e3d459c87ccddb08128045eb36e6098aec08ff5cc82a75cf7cce95f248.png",
+            "https://image.nostr.build/fddc3d93a9892cf43ef39c5640f8c027574d5a6bdd40f9558d12f33aed05e13c.png",
+            "https://image.nostr.build/a0afac2cb9ac192c4407ac85e2cfc7c5c61588e6339367852d7bcaf2bc48cb6b.png",
+            "https://image.nostr.build/53cdbe2e7a19f0912d7c5c1f3b359a2ad78297e48900d39d5db4259808959381.png",
+            "https://image.nostr.build/f38a38602f67a86c3601356cd0c7a654e0b6077d15540c3c7ec90ef261f04e8c.png",
+            "https://image.nostr.build/3f4bc49561797a53af93f1ab79c12ba8a61c4d2d8c762a81e663067c52de677c.jpg",
+            "https://image.nostr.build/464828ba89319e129a5a7203cfddc198bdae7807a1b0533bf8411579d7a1f6e7.png",
+            "https://image.nostr.build/d16866d4b65436d0381180282bb281b246c6a3cfb4c297c30413f79b3bc0dc6a.png",
+            "https://image.nostr.build/d69908fd998c1c7e5eb55e5134ba305c13542120714bc5abc1508b74d19adc84.png",
+            "https://image.nostr.build/19bc83d2f7a542291245dbecfe65e4f879cf6afd85e9bcc24b90118f2fd1dcec.png",
+            "https://image.nostr.build/d957f5d93dd60c8eaee3e8b98c287ad9d4a8b25a8bd5f8ca2f0b932b6fde40a4.png",
+            "https://image.nostr.build/752ef5dad2b14130e12f72f5a7428b2fb945840ca177d8c25b002c727a4af682.png",
+        ];
+
+        const container = document.getElementById('media-container');
+        const lightbox = document.getElementById('lightbox');
+        const lightboxBody = document.getElementById('lightbox-body');
+        const modalCopyBtn = document.getElementById('modal-copy-btn');
+
+        const isVideo = (url) => url.toLowerCase().endsWith('.mp4');
+        const isAudio = (url) => url.toLowerCase().endsWith('.mp3');
+
+        // 動画用の遅延読み込みObserver設定
+        const videoObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const video = entry.target;
+                    video.src = video.dataset.src;
+                    video.preload = "metadata";
+                    observer.unobserve(video);
+                }
+            });
+        }, {
+            rootMargin: "0px 0px 300px 0px"
+        });
+
+        const fragment = document.createDocumentFragment();
+
+        mediaUrls.forEach(url => {
+            const item = document.createElement('div');
+            item.classList.add('gallery-item');
+
+            const thumbWrapper = document.createElement('div');
+            thumbWrapper.classList.add('thumb-wrapper');
+            thumbWrapper.onclick = () => openLightbox(url);
+
+            if (isVideo(url)) {
+                // 動画の処理
+                const video = document.createElement('video');
+                video.dataset.src = url + "#t=0.1";
+                video.preload = "none";
+                video.muted = true;
+
+                thumbWrapper.appendChild(video);
+                thumbWrapper.classList.add('video-indicator');
+                videoObserver.observe(video);
+
+            } else if (isAudio(url)) {
+                // 音声の処理
+                const audioIcon = document.createElement('div');
+                audioIcon.style.color = "white";
+                audioIcon.style.height = "100%";
+                audioIcon.style.width = "100%";
+                audioIcon.style.display = "flex";
+                audioIcon.style.flexDirection = "column"; 
+                audioIcon.style.alignItems = "center";
+                audioIcon.style.justifyContent = "center";
+                audioIcon.style.padding = "10px";
+                audioIcon.style.boxSizing = "border-box";
+
+                const fileName = url.substring(url.lastIndexOf('/') + 1).split(/[?#]/)[0];
+
+                audioIcon.innerHTML = `
+                    <div style="font-size: 32px; margin-bottom: 8px;">🎵</div>
+                    <div style="font-size: 12px; width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">
+                        ${fileName}
+                    </div>
+                `;
+                
+                thumbWrapper.appendChild(audioIcon);
+
+            } else {
+                // 画像の処理
+                const img = document.createElement('img');
+                img.src = url;
+                img.loading = "lazy";
+                thumbWrapper.appendChild(img);
+            }
+
+            const info = document.createElement('div');
+            info.classList.add('item-info');
+            const btn = document.createElement('button');
+            btn.classList.add('copy-btn');
+            btn.textContent = "URLをコピー";
+            btn.onclick = (e) => { e.stopPropagation(); copyToClipboard(url); };
+
+            info.appendChild(btn);
+            item.appendChild(thumbWrapper);
+            item.appendChild(info);
+            fragment.appendChild(item);
+        });
+
+        container.appendChild(fragment);
+
+        function openLightbox(url) {
+            lightboxBody.innerHTML = ''; 
+
+            if (isVideo(url)) {
+                const video = document.createElement('video');
+                video.src = url;
+                video.controls = true;
+                video.autoplay = true;
+                video.classList.add('lightbox-content');
+                lightboxBody.appendChild(video);
+            } else if (isAudio(url)) {
+                const audio = document.createElement('audio');
+                audio.src = url;
+                audio.controls = true;
+                audio.autoplay = true;
+                lightboxBody.appendChild(audio);
+            } else {
+                const img = document.createElement('img');
+                img.src = url;
+                img.classList.add('lightbox-content');
+                lightboxBody.appendChild(img);
+            }
+
+            lightbox.classList.add('active');
+            modalCopyBtn.onclick = () => copyToClipboard(url);
+        }
+
+        function closeLightbox() {
+            lightboxBody.innerHTML = '';
+            lightbox.classList.remove('active');
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById('toast');
+                toast.style.opacity = "1";
+                setTimeout(() => toast.style.opacity = "0", 2000);
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === "Escape") closeLightbox();
+        });
+    </script>
+</body>
+</html>
